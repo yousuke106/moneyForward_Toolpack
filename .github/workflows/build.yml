@@ -27,14 +27,9 @@ jobs:
     - name: Run Build
       run: npm run build
 
-    - name: Zip Extension
-      run: |
-        cd dist
-        zip -r ../mf-subscription-checker.zip ./*
-
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: mf-subscription-checker-package
-        path: mf-subscription-checker.zip
+        path: dist/
         retention-days: 90
