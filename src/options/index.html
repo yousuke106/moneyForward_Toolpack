@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8">
+    <title>MF Subscription Checker 設定</title>
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <body>
+    <h1>設定</h1>
+    <p class="subtitle">同期上限超過時は自動でローカル保存に切り替わります。</p>
+
+    <div class="field">
+      <label for="apiKey">
+        Gemini APIキー <span aria-hidden="true">（必須）</span>
+      </label>
+      <div class="row-inline">
+        <input
+          id="apiKey"
+          type="password"
+          autocomplete="off"
+          aria-required="true"
+          class="flex-1"
+        >
+        <label class="row-inline" style="gap:4px; font-size:12px; margin:0;">
+          <input id="toggleApiKey" type="checkbox">
+          表示
+        </label>
+      </div>
+      <div id="apiKeyError" class="error" role="alert" aria-live="polite"></div>
+    </div>
+
+    <div class="field">
+      <label for="threshold">サブスクしきい値 (0-100)</label>
+      <input id="threshold" type="number" min="0" max="100" step="1" value="70">
+      <div
+        id="thresholdError"
+        class="error"
+        role="alert"
+        aria-live="polite"
+      ></div>
+    </div>
+
+    <div class="field">
+      <label for="model">モデル</label>
+      <select id="model"></select>
+      <div
+        id="customModelWrapper"
+        class="row-inline hidden"
+        style="margin-top:8px;"
+      >
+        <input
+          id="customModelInput"
+          type="text"
+          placeholder="任意のモデルIDを入力"
+          autocomplete="off"
+          class="flex-1"
+        >
+      </div>
+      <div
+        id="customModelError"
+        class="error"
+        role="alert"
+        aria-live="polite"
+      ></div>
+      <p class="note">
+        デフォルト: Gemini 2.5 Flash（高速・低コスト）。精度重視なら 2.5
+        Pro、検証目的なら 3 Pro Preview
+        を選択。カスタムで任意モデルIDも指定可能。
+      </p>
+    </div>
+
+    <p class="note">
+      ※設定は同期を試行し、容量超過やエラー時はローカル保存にフォールバックします。
+    </p>
+    <button id="saveBtn" disabled>保存</button>
+    <div id="status" class="status" aria-live="polite"></div>
+
+    <script type="module" src="./index.js"></script>
+  </body>
+</html>

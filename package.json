@@ -1,0 +1,13 @@
+{
+  "name": "mf-subscription-checker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "ultracite lint",
+    "format": "ultracite format"
+  },
+  "devDependencies": {
+    "ultracite": "^6.3.3"
+  }
+}

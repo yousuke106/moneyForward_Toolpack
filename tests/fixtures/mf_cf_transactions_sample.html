@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>MF 家計簿 DOM サンプル</title>
+</head>
+<body>
+  <table id="cf-detail-table">
+    <tbody>
+      <tr class="transaction_list js-cf-edit-container target-active" id="js-transaction-1788783355412939428">
+        <td class="calc">
+          <form class="new_user_asset_act">
+            <input value="1788783355412939428" type="hidden" name="user_asset_act[id]" />
+            <input class="h_l_ctg" income="-1" value="6" type="hidden" name="user_asset_act[large_category_id]" />
+            <input class="h_m_ctg" income="-1" value="18569829" type="hidden" name="user_asset_act[middle_category_id]" />
+            <input value="0" type="hidden" name="user_asset_act[is_income]" />
+            <input value="1" type="hidden" name="user_asset_act[is_target]" />
+          </form>
+        </td>
+        <td class="date" data-table-sortable-value="2025/11/18-1788783355412939428">
+          <div><span>11/18(火)</span></div>
+        </td>
+        <td class="content">
+          <div><span>USEN NETWORKSサー</span></div>
+        </td>
+        <td class="number amount minus-color">
+          <div><span class="offset">-4,950</span></div>
+        </td>
+        <td class="note calc" title="楽天カード 楽天カード(Visa) XXXX - XXXX - XXXX - 3410">楽天カード</td>
+        <td class="lctg">
+          <div class="btn-group btn_l_ctg"><a class="btn btn-small dropdown-toggle v_l_ctg">通信費</a></div>
+        </td>
+        <td class="mctg">
+          <div class="btn-group btn_m_ctg"><a class="btn btn-small dropdown-toggle v_m_ctg">①光回線</a></div>
+        </td>
+        <td class="memo form-switch-td" data-title="メモ">
+          <div class="noform"><span></span><i class="icon-pencil pull-right"></i></div>
+          <div class="form hide"><input class="v_memo" type="text" name="user_asset_act[memo]" /></div>
+        </td>
+        <td class="calc"><i class="icon-exchange icon-large js-switch-transfer" data-link="/cf/update.js?change_type=enable_transfer&id=1788783355412939428"></i></td>
+        <td class="delete"></td>
+      </tr>
+
+      <tr class="transaction_list js-cf-edit-container target-active" id="js-transaction-1788783166253761188">
+        <td class="calc">
+          <form class="new_user_asset_act">
+            <input value="1788783166253761188" type="hidden" name="user_asset_act[id]" />
+            <input class="h_l_ctg" income="1" value="1" type="hidden" name="user_asset_act[large_category_id]" />
+            <input class="h_m_ctg" income="1" value="89" type="hidden" name="user_asset_act[middle_category_id]" />
+            <input value="1" type="hidden" name="user_asset_act[is_income]" />
+            <input value="1" type="hidden" name="user_asset_act[is_target]" />
+          </form>
+        </td>
+        <td class="date" data-table-sortable-value="2025/11/17-1788783166253761188">
+          <div><span>11/17(月)</span></div>
+        </td>
+        <td class="content">
+          <div><span>振込*ラクテンシヨウケン</span></div>
+        </td>
+        <td class="number amount plus-color">
+          <div><span class="offset">1,170</span></div>
+        </td>
+        <td class="note calc" title="住信SBIネット銀行 101 代表口座 - 円普通 4885605">住信SBIネット銀行</td>
+        <td class="lctg">
+          <div class="btn-group btn_l_ctg"><a class="btn btn-small dropdown-toggle v_l_ctg">収入</a></div>
+        </td>
+        <td class="mctg">
+          <div class="btn-group btn_m_ctg"><a class="btn btn-small dropdown-toggle v_m_ctg">配当所得</a></div>
+        </td>
+        <td class="memo form-switch-td" data-title="メモ">
+          <div class="noform"><span></span><i class="icon-pencil pull-right"></i></div>
+          <div class="form hide"><input class="v_memo" type="text" name="user_asset_act[memo]" /></div>
+        </td>
+        <td class="calc"><i class="icon-exchange icon-large js-switch-transfer" data-link="/cf/update.js?change_type=enable_transfer&id=1788783166253761188"></i></td>
+        <td class="delete"></td>
+      </tr>
+
+      <tr class="transaction_list js-cf-edit-container mf-grayout" id="js-transaction-1788783166253695652">
+        <td class="calc">
+          <form class="new_user_asset_act">
+            <input value="1788783166253695652" type="hidden" name="user_asset_act[id]" />
+            <input class="h_l_ctg" income="-1" value="0" type="hidden" name="user_asset_act[large_category_id]" />
+            <input class="h_m_ctg" income="-1" value="0" type="hidden" name="user_asset_act[middle_category_id]" />
+            <input value="0" type="hidden" name="user_asset_act[is_income]" />
+          </form>
+        </td>
+        <td class="date" data-table-sortable-value="2025/11/17-1788783166253695652">
+          <div><span>11/17(月)</span></div>
+        </td>
+        <td class="content">
+          <div><span>振込*ラクテンシヨウケン</span></div>
+        </td>
+        <td class="number amount">
+          <div><span class="offset">-50,000</span><div class="offset">(振替)</div></div>
+        </td>
+        <td class="calc" title="住信SBIネット銀行 101 代表口座 - 円普通 4885605からの振替">
+          住信SBIネット銀行
+          <div class="noform transfer_account_box"><a class="disable-link-color">未設定</a><i class="icon-pencil pull-right"></i></div>
+        </td>
+        <td class="lctg"></td>
+        <td class="mctg"></td>
+        <td class="memo form-switch-td" data-title="メモ">
+          <div class="noform"><span></span><i class="icon-pencil pull-right"></i></div>
+          <div class="form hide"><input class="v_memo" type="text" name="user_asset_act[memo]" /></div>
+        </td>
+        <td class="calc"><i class="icon-exchange icon-large js-switch-transfer" data-link="/cf/update.js?change_type=enable_transfer&id=1788783166253695652"></i></td>
+        <td class="delete"></td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>
