@@ -27,9 +27,14 @@ jobs:
     - name: Run Build
       run: npm run build
 
+    - name: Prepare Artifact
+      run: |
+        mkdir -p artifact
+        mv dist artifact/
+
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: mf-subscription-checker-package
-        path: dist/
+        path: artifact/
         retention-days: 90
