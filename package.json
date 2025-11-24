@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "lint": "ultracite lint",
-    "format": "ultracite format"
+    "format": "ultracite format",
+    "build": "node scripts/build.js"
   },
   "devDependencies": {
     "ultracite": "^6.3.3"
