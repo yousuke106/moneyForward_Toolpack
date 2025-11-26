@@ -2,6 +2,8 @@
 
 const AMOUNT_REGEX = /[-+−]?\d[\d,]*/u;
 
+const NEGATIVE_HEAD_REGEX = /^[-−]/u;
+
 (() => {
   const LABELS = [
     { value: "", text: "未設定" },
@@ -146,7 +148,7 @@ const AMOUNT_REGEX = /[-+−]?\d[\d,]*/u;
     const text =
       cell?.querySelector(".offset")?.textContent ?? cell?.textContent ?? "";
     const trimmed = text?.trim() ?? "";
-    return /^[-−]/u.test(trimmed);
+    return NEGATIVE_HEAD_REGEX.test(trimmed);
   };
 
   const setSelectValue = (row, label) => {
@@ -288,14 +290,23 @@ const AMOUNT_REGEX = /[-+−]?\d[\d,]*/u;
   // Gemini 解析
   const loadSettings = () =>
     new Promise((resolve) => {
-      if (!chrome?.storage?.sync) {
+      if (!chrome?.storage) {
         resolve({});
         return;
       }
-      chrome.storage.sync.get("settings", (res) => resolve(res.settings ?? {}));
+      chrome.storage.sync.get("settings", (res) => {
+        const syncSettings = res?.settings;
+        if (syncSettings) {
+          resolve(syncSettings);
+          return;
+        }
+        chrome.storage.local.get("settings", (localRes) => {
+          resolve(localRes?.settings ?? {});
+        });
+      });
     });
 
-  const getViewMonth = () => {
+  const _getViewMonth = () => {
     const rows = document.querySelectorAll("tr.transaction_list");
     for (const row of rows) {
       const parsed = parseDate(row);
@@ -383,26 +394,47 @@ const AMOUNT_REGEX = /[-+−]?\d[\d,]*/u;
     if (!card) {
       return;
     }
+
     const sub = card.querySelector(".mf-sub-indicator__sub");
     const fill = card.querySelector(".mf-sub-indicator__bar-fill");
     const status = card.querySelector(".mf-sub-indicator__status");
+
     if (sub) {
-      sub.textContent = opts.done
-        ? "結果を反映しました"
-        : `バッチ ${current}/${total}（残り ${Math.max(remainingCount, 0)} 件）`;
+      sub.textContent = getProgressText(current, total, remainingCount, opts);
     }
+
     if (fill) {
-      const pct = Math.min(100, Math.round((current / total) * 100));
-      fill.style.width = `${pct}%`;
+      fill.style.width = `${getProgressPercent(current, total)}%`;
     }
+
     if (status) {
-      status.textContent = opts.done ? "Gemini解析完了" : "Gemini解析中…";
-      card.classList.toggle("mf-sub-indicator--success", Boolean(opts.done));
-      card.classList.toggle("mf-sub-indicator--error", Boolean(opts.error));
+      applyStatusIndicators(card, status, opts);
     }
+
     if (opts.errorMessage && sub) {
       sub.textContent = opts.errorMessage;
     }
+  };
+
+  const getProgressText = (current, total, remainingCount, opts) => {
+    if (opts.done) {
+      return "結果を反映しました";
+    }
+    const safeRemaining = Math.max(remainingCount, 0);
+    return `バッチ ${current}/${total}（残り ${safeRemaining} 件）`;
+  };
+
+  const getProgressPercent = (current, total) => {
+    const ratio = current / total;
+    return Math.min(100, Math.round(ratio * 100));
+  };
+
+  const applyStatusIndicators = (card, statusEl, opts) => {
+    const isDone = Boolean(opts.done);
+    const isError = Boolean(opts.error);
+    statusEl.textContent = isDone ? "Gemini解析完了" : "Gemini解析中…";
+    card.classList.toggle("mf-sub-indicator--success", isDone);
+    card.classList.toggle("mf-sub-indicator--error", isError);
   };
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: DOM収集処理を一括で実行するため許容
@@ -480,6 +512,12 @@ const AMOUNT_REGEX = /[-+−]?\d[\d,]*/u;
     const apiKey = settings.geminiApiKey;
     const threshold = settings.scoreThreshold ?? DEFAULT_THRESHOLD;
     const model = settings.model ?? DEFAULT_MODEL;
+    const geminiEnabled = settings.featureFlags?.geminiAnalysisEnabled ?? true;
+
+    if (!geminiEnabled) {
+      log("skip: gemini disabled by settings");
+      return;
+    }
     if (!apiKey) {
       log("skip: apiKey missing");
       return;
@@ -499,37 +537,79 @@ const AMOUNT_REGEX = /[-+−]?\d[\d,]*/u;
       return;
     }
 
-    const batches = [];
     const batchSize = 15;
-    for (let i = 0; i < transactions.length; i += batchSize) {
-      batches.push(transactions.slice(i, i + batchSize));
-    }
+    const batches = buildBatches(transactions, batchSize);
 
     const removeOverlay = showProgressOverlay(batches.length);
+    const batchResult = await processGeminiBatches({
+      batches,
+      batchSize,
+      threshold,
+      month,
+      apiKey,
+      model,
+      transactions,
+      onProgress: updateProgressOverlay,
+      onError: (idx, errorMessage) => {
+        log("gemini batch error", idx, errorMessage);
+        setTimeout(() => removeOverlay(), 2000);
+      },
+    });
 
-    const sendBatch = (payload) =>
-      new Promise((resolve, reject) => {
-        let settled = false;
-        const timeout = setTimeout(() => {
-          if (!settled) {
-            settled = true;
-            reject(new Error("batch timeout"));
-          }
-        }, 65000);
-        chrome.runtime.sendMessage(payload, (response) => {
-          if (settled) return;
+    if (batchResult === "error") {
+      return;
+    }
+
+    updateProgressOverlay(batches.length, batches.length, 0, { done: true });
+    markMonthProcessed(month);
+    setTimeout(() => removeOverlay(), 1200);
+  };
+
+  const buildBatches = (items, size) => {
+    if (size <= 0) {
+      return [items];
+    }
+    return Array.from({ length: Math.ceil(items.length / size) }, (_v, idx) =>
+      items.slice(idx * size, (idx + 1) * size)
+    );
+  };
+
+  const sendGeminiBatch = (payload) =>
+    new Promise((resolve, reject) => {
+      let settled = false;
+      const timeout = setTimeout(() => {
+        if (!settled) {
           settled = true;
-          clearTimeout(timeout);
-          if (response?.ok && response.data?.results) {
-            resolve(response.data.results);
-          } else {
-            reject(new Error(response?.error ?? "unknown"));
-          }
-        });
+          reject(new Error("batch timeout"));
+        }
+      }, 65_000);
+      chrome.runtime.sendMessage(payload, (response) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        if (response?.ok && response.data?.results) {
+          resolve(response.data.results);
+        } else {
+          reject(new Error(response?.error ?? "unknown"));
+        }
       });
+    });
 
+  const processGeminiBatches = async ({
+    batches,
+    batchSize,
+    threshold,
+    month,
+    apiKey,
+    model,
+    transactions,
+    onProgress,
+    onError,
+  }) => {
     for (let i = 0; i < batches.length; i += 1) {
-      updateProgressOverlay(
+      onProgress?.(
         i + 1,
         batches.length,
         transactions.length - (i + 1) * batchSize
@@ -542,23 +622,19 @@ const AMOUNT_REGEX = /[-+−]?\d[\d,]*/u;
         transactions: batches[i],
       };
       // eslint-disable-next-line no-await-in-loop
-      const result = await sendBatch(payload).catch((error) => error);
+      const result = await sendGeminiBatch(payload).catch((error) => error);
       if (result instanceof Error) {
-        updateProgressOverlay(i + 1, batches.length, 0, {
+        onProgress?.(i + 1, batches.length, 0, {
           error: true,
           errorMessage: "Gemini解析に失敗しました",
         });
-        log("gemini batch error", i + 1, result.message);
-        setTimeout(() => removeOverlay(), 2000);
-        return;
+        onError?.(i + 1, result.message);
+        return "error";
       }
       log("gemini ok batch", i + 1, result.length);
       applyGeminiHighlight(result, threshold);
     }
-
-    updateProgressOverlay(batches.length, batches.length, 0, { done: true });
-    markMonthProcessed(month);
-    setTimeout(() => removeOverlay(), 1200);
+    return "ok";
   };
 
   // 初回実行 & DOM変化時に実行をデバウンス
@@ -582,7 +658,7 @@ const AMOUNT_REGEX = /[-+−]?\d[\d,]*/u;
   geminiObserver.observe(listBody, { childList: true, subtree: true });
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "sync" && changes.settings) {
+    if ((area === "sync" || area === "local") && changes.settings) {
       clearSessionFlags();
       log("settings changed; session flag cleared (no auto-run)");
     }

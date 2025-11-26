@@ -1,4 +1,36 @@
-document.getElementById("openOptions")?.addEventListener("click", () => {
+import { loadSettings } from "../data/storage.js";
+
+const openOptionsBtn = document.getElementById("openOptions");
+const rerunBtn = document.getElementById("rerunGemini");
+
+const applyToggleState = (enabled) => {
+  if (!rerunBtn) {
+    return;
+  }
+  rerunBtn.disabled = !enabled;
+  if (enabled) {
+    rerunBtn.removeAttribute("title");
+    rerunBtn.setAttribute("aria-disabled", "false");
+  } else {
+    rerunBtn.title = "Gemini解析は無効化されています";
+    rerunBtn.setAttribute("aria-disabled", "true");
+  }
+};
+
+const syncToggleFromSettings = async () => {
+  try {
+    const result = await loadSettings();
+    const enabled =
+      result?.settings?.featureFlags?.geminiAnalysisEnabled ?? true;
+    applyToggleState(enabled);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn("[mf-sub][popup] failed to load settings", error);
+    applyToggleState(true);
+  }
+};
+
+openOptionsBtn?.addEventListener("click", () => {
   const runtime = globalThis.chrome?.runtime;
   if (runtime?.openOptionsPage) {
     runtime.openOptionsPage();
@@ -7,7 +39,10 @@ document.getElementById("openOptions")?.addEventListener("click", () => {
   }
 });
 
-document.getElementById("rerunGemini")?.addEventListener("click", () => {
+rerunBtn?.addEventListener("click", () => {
+  if (rerunBtn.disabled) {
+    return;
+  }
   chrome.tabs?.query({ active: true, currentWindow: true }, (tabs) => {
     const tabId = tabs?.[0]?.id;
     if (tabId !== undefined) {
@@ -16,3 +51,11 @@ document.getElementById("rerunGemini")?.addEventListener("click", () => {
     }
   });
 });
+
+chrome.storage?.onChanged?.addListener((changes) => {
+  if (changes.settings?.newValue || changes.settings?.oldValue) {
+    syncToggleFromSettings();
+  }
+});
+
+syncToggleFromSettings();

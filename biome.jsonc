@@ -1,15 +1,14 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-  "extends": ["ultracite/core"],
+  "extends": ["ultracite/core", "ultracite/react"],
   "files": {
     "includes": [
       "src/**",
-      "tests/**/*.ts",
-      "tests/**/*.tsx",
-      "tests/**/*.js",
       "manifest.json",
       "package.json",
-      "biome.jsonc"
+      "biome.jsonc",
+      "!tests",
+      "!tests/fixtures"
     ]
   },
   "javascript": {

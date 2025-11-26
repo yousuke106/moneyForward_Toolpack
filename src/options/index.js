@@ -11,8 +11,11 @@ const statusEl = document.getElementById("status");
 const saveBtn = document.getElementById("saveBtn");
 const apiKeyErrorEl = document.getElementById("apiKeyError");
 const thresholdErrorEl = document.getElementById("thresholdError");
+const geminiToggle = document.getElementById("geminiToggle");
 
 const CUSTOM_MODEL_VALUE = "__custom__";
+const DEFAULT_THRESHOLD = 70;
+const DEFAULT_MODEL = "gemini-2.5-flash";
 const MODEL_OPTIONS = [
   { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash（推奨・高速）" },
   { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro（高精度）" },
@@ -93,13 +96,57 @@ const validate = () => {
     modelValue === CUSTOM_MODEL_VALUE
       ? customModelInput.value.trim()
       : modelValue;
-  return { valid, apiKey, threshold, model: resolvedModel };
+  const geminiEnabled = geminiToggle?.checked ?? true;
+  return { valid, apiKey, threshold, model: resolvedModel, geminiEnabled };
+};
+
+const resolveModelValue = (loadedModel) => {
+  const modelValue = modelSelect.value;
+  if (modelValue === CUSTOM_MODEL_VALUE) {
+    const customValue = customModelInput.value.trim();
+    if (customValue) {
+      return customValue;
+    }
+    if (loadedModel) {
+      return loadedModel;
+    }
+    return DEFAULT_MODEL;
+  }
+  return modelValue || loadedModel || DEFAULT_MODEL;
+};
+
+const buildSettingsSnapshot = (geminiEnabled, loadedSettings = {}) => {
+  const apiKeyFallback = loadedSettings.geminiApiKey ?? "";
+  const thresholdFallback =
+    typeof loadedSettings.scoreThreshold === "number"
+      ? loadedSettings.scoreThreshold
+      : DEFAULT_THRESHOLD;
+
+  const thresholdRaw = thresholdInput.value;
+  const thresholdNumber = Number(thresholdRaw);
+  const threshold = Number.isFinite(thresholdNumber)
+    ? thresholdNumber
+    : thresholdFallback;
+
+  const resolvedModel = resolveModelValue(loadedSettings.model);
+
+  return {
+    geminiApiKey: apiKeyInput.value.trim() || apiKeyFallback,
+    scoreThreshold: threshold,
+    model: resolvedModel,
+    featureFlags: {
+      geminiAnalysisEnabled: geminiEnabled,
+    },
+  };
 };
 
 const load = async () => {
   const result = await loadSettings();
   if (!result) {
     modelSelect.value = "gemini-2.5-flash";
+    if (geminiToggle) {
+      geminiToggle.checked = true;
+    }
     renderStatus("未保存です。設定を入力してください。");
     validate();
     return;
@@ -124,12 +171,16 @@ const load = async () => {
       customModelInput.value = settings.model;
     }
   }
+  const geminiEnabled = settings.featureFlags?.geminiAnalysisEnabled ?? true;
+  if (geminiToggle) {
+    geminiToggle.checked = geminiEnabled;
+  }
   renderStatus(`ロード元: ${area === "sync" ? "sync" : "local"}`);
   validate();
 };
 
 const onSave = async () => {
-  const { valid, apiKey, threshold, model } = validate();
+  const { valid, apiKey, threshold, model, geminiEnabled } = validate();
   if (!valid) {
     return;
   }
@@ -138,6 +189,9 @@ const onSave = async () => {
     geminiApiKey: apiKey,
     scoreThreshold: threshold,
     model,
+    featureFlags: {
+      geminiAnalysisEnabled: geminiEnabled,
+    },
   };
   const result = await saveSettingsWithFallback(settings);
   const areaLabel = result.area === "sync" ? "sync" : "local";
@@ -160,6 +214,30 @@ for (const el of [apiKeyInput, thresholdInput, modelSelect, customModelInput]) {
   el.addEventListener("input", validate);
   el.addEventListener("change", validate);
 }
+
+if (geminiToggle) {
+  geminiToggle.addEventListener("change", () => {
+    validate();
+    const enabled = geminiToggle.checked;
+    saveFeatureToggle(enabled).catch((error) =>
+      renderStatus(`保存に失敗しました: ${error.message}`, true)
+    );
+  });
+}
+
+const saveFeatureToggle = async (enabled) => {
+  const loaded = await loadSettings();
+  const snapshot = buildSettingsSnapshot(enabled, loaded?.settings ?? {});
+  const result = await saveSettingsWithFallback(snapshot);
+  const areaLabel = result.area === "sync" ? "sync" : "local";
+  let reason = "";
+  if (result.reason === "sync_threshold") {
+    reason = "（sync容量超過のためローカル保存）";
+  } else if (result.reason === "sync_error") {
+    reason = "（sync書き込みエラーのためローカル保存）";
+  }
+  renderStatus(`保存しました: ${areaLabel}${reason}`);
+};
 
 // 初期表示は非表示状態
 if (toggleApiKey) {

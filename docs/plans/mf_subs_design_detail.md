@@ -20,7 +20,7 @@
   - `paymentSource: string`
 - `NormalizedStoreKey`: `"sa:${normalizedStore}|${amount}"`
 - `TxKey`: `"tx:${transactionId}"`
-- `Settings`: `{ geminiApiKey: string; scoreThreshold: number; excludedCategories?: string[] }`
+- `Settings`: `{ geminiApiKey: string; scoreThreshold: number; excludedCategories?: string[]; featureFlags?: { geminiAnalysisEnabled?: boolean } }`
 - `GeminiRequest`: `{ month: string; transactions: Transaction[] }`
 - `GeminiResult`: `{ id: string; score: number; service_name?: string; reason?: string }`
 
@@ -79,7 +79,7 @@
 
 ### Popup（補足）
 - 役割: ユーザーが手動で再解析をトリガーできるようにする。
-- UI: ボタン「設定を開く」「このページで再解析」。
+- UI: ボタン「設定を開く」「このページで再解析」。Gemini解析トグルが OFF の場合は「このページで再解析」を disabled にし、`title` などで理由を表示（例: `Gemini解析は無効化中`）。
   - 「設定を開く」: options ページを `chrome.runtime.openOptionsPage` で開く。
   - 「このページで再解析」: アクティブタブへ `{ type: "mf_subs_rerun_gemini" }` を送信。content 側でセッションフラグをクリアし、Gemini を再実行する。
 - 権限: manifest に `optional_permissions: ["activeTab"]` を追加済み。
@@ -201,6 +201,7 @@
   - サブスクしきい値(0-100)
   - モデル選択（初期値 `gemini-2.5-flash` 推奨。候補: 2.5 Pro / 2.5 Flash-Lite / 3 Pro Preview など＋カスタム入力）
   - 将来用の除外カテゴリ配列（多選択）
+  - Gemini解析トグル（ON/OFF, 初期値 ON）。OFF 時は Popup の再解析ボタンも自動で無効化される。
 - バリデーション: しきい値は整数0-100、APIキーは非空。保存不可時は入力横にエラー文言。
 - 保存: `chrome.storage.sync.set({ settings })`。保存成功をトースト表示。
 - `storage.onChanged` ではセッションフラグをクリアするのみで自動再解析は行わず、ユーザーが再解析ボタン/リロードで反映する。

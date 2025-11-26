@@ -1,17 +1,14 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PROJECT_ROOT = path.join(__dirname, '..');
-const DIST_DIR = path.join(PROJECT_ROOT, 'dist');
+const PROJECT_ROOT = path.join(__dirname, "..");
+const DIST_DIR = path.join(PROJECT_ROOT, "dist");
 
-const ITEMS_TO_COPY = [
-  'manifest.json',
-  'src'
-];
+const ITEMS_TO_COPY = ["manifest.json", "src"];
 
 // 递归复制函数
 function copyRecursiveSync(src, dest) {
@@ -23,9 +20,12 @@ function copyRecursiveSync(src, dest) {
     if (!fs.existsSync(dest)) {
       fs.mkdirSync(dest);
     }
-    fs.readdirSync(src).forEach((childItemName) => {
-      copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
-    });
+    for (const childItemName of fs.readdirSync(src)) {
+      copyRecursiveSync(
+        path.join(src, childItemName),
+        path.join(dest, childItemName)
+      );
+    }
   } else {
     fs.copyFileSync(src, dest);
   }
@@ -40,16 +40,18 @@ fs.mkdirSync(DIST_DIR);
 console.log(`Building extension to: ${DIST_DIR}`);
 
 // 复制文件
-ITEMS_TO_COPY.forEach(item => {
+for (const item of ITEMS_TO_COPY) {
   const srcPath = path.join(PROJECT_ROOT, item);
   const destPath = path.join(DIST_DIR, item);
-  
+
   if (fs.existsSync(srcPath)) {
     copyRecursiveSync(srcPath, destPath);
     console.log(`Copied: ${item}`);
   } else {
     console.warn(`Warning: Source not found: ${item}`);
   }
-});
+}
 
-console.log('Done! You can now load the "dist" folder as an unpacked extension.');
+console.log(
+  'Done! You can now load the "dist" folder as an unpacked extension.'
+);
