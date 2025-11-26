@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MF Subscription Checker",
-  "description": "MoneyForward家計簿でサブスク候補を可視化・ラベル管理する拡張（UI先行モック）。",
+  "description": "MoneyForward MEの家計簿ページで、AIを活用してサブスクリプション（固定費）候補を自動検出し、可視化・管理・見直しをサポートする拡張機能です。",
   "version": "0.1.0",
   "icons": {
     "16": "src/assets/icons/icon16.png",

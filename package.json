@@ -9,6 +9,7 @@
     "build": "node scripts/build.js"
   },
   "devDependencies": {
-    "ultracite": "^6.3.3"
+    "@biomejs/biome": "^2.3.7",
+    "ultracite": "^6.3.6"
   }
 }
