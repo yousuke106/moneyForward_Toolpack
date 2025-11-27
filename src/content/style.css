@@ -7,6 +7,26 @@
   background-color: rgba(255, 255, 0, 0.25) !important;
 }
 
+.mf-sub-duplicate {
+  background-color: rgba(240, 140, 0, 0.2);
+  border-left: 4px solid #f08c00;
+  transition:
+    background-color 120ms ease-in-out,
+    border-color 120ms ease-in-out;
+}
+
+.mf-sub-duplicate td {
+  background-color: rgba(240, 140, 0, 0.2) !important;
+}
+
+.mf-sub-duplicate.mf-sub-highlight,
+.mf-sub-highlight.mf-sub-duplicate,
+.mf-sub-duplicate.mf-sub-highlight td,
+.mf-sub-highlight.mf-sub-duplicate td {
+  background-color: rgba(240, 140, 0, 0.2) !important;
+  border-left: 4px solid #f08c00;
+}
+
 .mf-sub-select {
   min-width: 90px;
   max-width: 140px;

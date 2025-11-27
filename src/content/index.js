@@ -22,6 +22,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       "dev"
     );
   const HIGHLIGHT_CLASS = "mf-sub-highlight";
+  const DUPLICATE_CLASS = "mf-sub-duplicate";
   const SESSION_FLAG_PREFIX = "mf_subs_checked_";
   const DEFAULT_THRESHOLD = 70;
   const DEFAULT_MODEL = "gemini-2.5-flash";
@@ -49,6 +50,16 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const buildTxKey = (id) => `tx:${id}`;
   const buildStoreAmountKey = (store, amount) =>
     `sa:${normalizeStoreName(store)}|${amount}`;
+  const buildDuplicateKey = ({ date, store, amount }) => {
+    if (!(date && store) || amount === null || amount === undefined) {
+      return "";
+    }
+    const normalizedStore = normalizeStoreName(store);
+    if (!normalizedStore) {
+      return "";
+    }
+    return `dup:${date}|${normalizedStore}|${amount}`;
+  };
 
   const parseAmount = (text) => {
     if (!text) {
@@ -486,6 +497,64 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return txList;
   };
 
+  const groupDuplicates = (transactions) => {
+    const byKey = new Map();
+    const list =
+      transactions?.map((tx) => ({
+        ...tx,
+        key: tx?.id
+          ? buildDuplicateKey({
+              date: tx.date,
+              store: tx.store,
+              amount: tx.amount,
+            })
+          : "",
+      })) ?? [];
+
+    for (const tx of list) {
+      if (!(tx.id && tx.key)) {
+        continue;
+      }
+      const ids = byKey.get(tx.key);
+      if (ids) {
+        ids.push(tx.id);
+      } else {
+        byKey.set(tx.key, [tx.id]);
+      }
+    }
+
+    const duplicateTxIds = new Set(
+      [...byKey.values()].flatMap((ids) => (ids.length >= 2 ? ids : []))
+    );
+    return { byKey, duplicateTxIds };
+  };
+
+  const clearDuplicateHighlight = () => {
+    const rows = document.querySelectorAll("tr.transaction_list");
+    for (const row of rows) {
+      row.classList.remove(DUPLICATE_CLASS);
+      if (row.title === "同日・同内容・同額の取引が複数あります") {
+        row.removeAttribute("title");
+      }
+    }
+  };
+
+  const applyDuplicateHighlight = (duplicateTxIds) => {
+    const rows = document.querySelectorAll("tr.transaction_list");
+    for (const row of rows) {
+      const txId = findTxId(row);
+      if (txId && duplicateTxIds.has(txId)) {
+        row.classList.add(DUPLICATE_CLASS);
+        row.title = "同日・同内容・同額の取引が複数あります";
+      } else {
+        row.classList.remove(DUPLICATE_CLASS);
+        if (row.title === "同日・同内容・同額の取引が複数あります") {
+          row.removeAttribute("title");
+        }
+      }
+    }
+  };
+
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: ハイライト処理を一括で実行するため許容
   const applyGeminiHighlight = (results, threshold) => {
     const rows = document.querySelectorAll("tr.transaction_list");
@@ -505,6 +574,28 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         row.classList.add(HIGHLIGHT_CLASS);
       }
     }
+  };
+
+  const runDuplicateCheck = async () => {
+    const settings = await loadSettings();
+    const enabled = settings.featureFlags?.duplicateCheckEnabled ?? true;
+    if (!enabled) {
+      clearDuplicateHighlight();
+      return;
+    }
+    const transactions = collectTransactions().filter(
+      (tx) => tx.store && tx.date
+    );
+    if (transactions.length === 0) {
+      clearDuplicateHighlight();
+      return;
+    }
+    const { duplicateTxIds } = groupDuplicates(transactions);
+    if (duplicateTxIds.size === 0) {
+      clearDuplicateHighlight();
+      return;
+    }
+    applyDuplicateHighlight(duplicateTxIds);
   };
 
   const runGemini = async () => {
@@ -651,16 +742,36 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     };
   })();
 
+  const scheduleDuplicateCheck = (() => {
+    let pending = null;
+    return () => {
+      if (pending) {
+        return;
+      }
+      pending = setTimeout(() => {
+        pending = null;
+        runDuplicateCheck();
+      }, 200);
+    };
+  })();
+
   scheduleInit();
   scheduleRunGemini();
+  scheduleDuplicateCheck();
 
   const geminiObserver = new MutationObserver(() => scheduleRunGemini());
   geminiObserver.observe(listBody, { childList: true, subtree: true });
+
+  const duplicateObserver = new MutationObserver(() =>
+    scheduleDuplicateCheck()
+  );
+  duplicateObserver.observe(listBody, { childList: true, subtree: true });
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if ((area === "sync" || area === "local") && changes.settings) {
       clearSessionFlags();
       log("settings changed; session flag cleared (no auto-run)");
+      scheduleDuplicateCheck();
     }
   });
 

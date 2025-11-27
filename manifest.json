@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "MF Subscription Checker",
+  "name": "MoneyForward Toolpack",
   "description": "MoneyForward MEの家計簿ページで、AIを活用してサブスクリプション（固定費）候補を自動検出し、可視化・管理・見直しをサポートする拡張機能です。",
   "version": "0.1.0",
   "icons": {
@@ -15,7 +15,7 @@
     "https://generativelanguage.googleapis.com/*"
   ],
   "action": {
-    "default_title": "MF Subscription Checker",
+    "default_title": "MoneyForward Toolpack",
     "default_popup": "src/popup/index.html"
   },
   "background": {

@@ -12,6 +12,7 @@ const saveBtn = document.getElementById("saveBtn");
 const apiKeyErrorEl = document.getElementById("apiKeyError");
 const thresholdErrorEl = document.getElementById("thresholdError");
 const geminiToggle = document.getElementById("geminiToggle");
+const duplicateToggle = document.getElementById("duplicateToggle");
 
 const CUSTOM_MODEL_VALUE = "__custom__";
 const DEFAULT_THRESHOLD = 70;
@@ -97,7 +98,15 @@ const validate = () => {
       ? customModelInput.value.trim()
       : modelValue;
   const geminiEnabled = geminiToggle?.checked ?? true;
-  return { valid, apiKey, threshold, model: resolvedModel, geminiEnabled };
+  const duplicateEnabled = duplicateToggle?.checked ?? true;
+  return {
+    valid,
+    apiKey,
+    threshold,
+    model: resolvedModel,
+    geminiEnabled,
+    duplicateEnabled,
+  };
 };
 
 const resolveModelValue = (loadedModel) => {
@@ -115,7 +124,11 @@ const resolveModelValue = (loadedModel) => {
   return modelValue || loadedModel || DEFAULT_MODEL;
 };
 
-const buildSettingsSnapshot = (geminiEnabled, loadedSettings = {}) => {
+const buildSettingsSnapshot = (
+  geminiEnabled,
+  duplicateEnabled,
+  loadedSettings = {}
+) => {
   const apiKeyFallback = loadedSettings.geminiApiKey ?? "";
   const thresholdFallback =
     typeof loadedSettings.scoreThreshold === "number"
@@ -136,22 +149,12 @@ const buildSettingsSnapshot = (geminiEnabled, loadedSettings = {}) => {
     model: resolvedModel,
     featureFlags: {
       geminiAnalysisEnabled: geminiEnabled,
+      duplicateCheckEnabled: duplicateEnabled,
     },
   };
 };
 
-const load = async () => {
-  const result = await loadSettings();
-  if (!result) {
-    modelSelect.value = "gemini-2.5-flash";
-    if (geminiToggle) {
-      geminiToggle.checked = true;
-    }
-    renderStatus("未保存です。設定を入力してください。");
-    validate();
-    return;
-  }
-  const { settings, area } = result;
+const applySettingsToUi = (settings, area) => {
   if (settings.geminiApiKey) {
     apiKeyInput.value = settings.geminiApiKey;
   }
@@ -172,15 +175,37 @@ const load = async () => {
     }
   }
   const geminiEnabled = settings.featureFlags?.geminiAnalysisEnabled ?? true;
+  const duplicateEnabled = settings.featureFlags?.duplicateCheckEnabled ?? true;
   if (geminiToggle) {
     geminiToggle.checked = geminiEnabled;
   }
+  if (duplicateToggle) {
+    duplicateToggle.checked = duplicateEnabled;
+  }
   renderStatus(`ロード元: ${area === "sync" ? "sync" : "local"}`);
-  validate();
 };
 
+const load = async () => {
+  const result = await loadSettings();
+  if (!result) {
+    modelSelect.value = "gemini-2.5-flash";
+    if (geminiToggle) {
+      geminiToggle.checked = true;
+    }
+    if (duplicateToggle) {
+      duplicateToggle.checked = true;
+    }
+    renderStatus("未保存です。設定を入力してください。");
+    validate();
+    return;
+  }
+  const { settings, area } = result;
+  applySettingsToUi(settings, area);
+  validate();
+};
 const onSave = async () => {
-  const { valid, apiKey, threshold, model, geminiEnabled } = validate();
+  const { valid, apiKey, threshold, model, geminiEnabled, duplicateEnabled } =
+    validate();
   if (!valid) {
     return;
   }
@@ -191,6 +216,7 @@ const onSave = async () => {
     model,
     featureFlags: {
       geminiAnalysisEnabled: geminiEnabled,
+      duplicateCheckEnabled: duplicateEnabled,
     },
   };
   const result = await saveSettingsWithFallback(settings);
@@ -218,16 +244,32 @@ for (const el of [apiKeyInput, thresholdInput, modelSelect, customModelInput]) {
 if (geminiToggle) {
   geminiToggle.addEventListener("change", () => {
     validate();
-    const enabled = geminiToggle.checked;
-    saveFeatureToggle(enabled).catch((error) =>
+    const geminiEnabled = geminiToggle.checked;
+    const duplicateEnabled = duplicateToggle?.checked ?? true;
+    saveFeatureToggle(geminiEnabled, duplicateEnabled).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
   });
 }
 
-const saveFeatureToggle = async (enabled) => {
+if (duplicateToggle) {
+  duplicateToggle.addEventListener("change", () => {
+    validate();
+    const geminiEnabled = geminiToggle?.checked ?? true;
+    const duplicateEnabled = duplicateToggle.checked;
+    saveFeatureToggle(geminiEnabled, duplicateEnabled).catch((error) =>
+      renderStatus(`保存に失敗しました: ${error.message}`, true)
+    );
+  });
+}
+
+const saveFeatureToggle = async (geminiEnabled, duplicateEnabled) => {
   const loaded = await loadSettings();
-  const snapshot = buildSettingsSnapshot(enabled, loaded?.settings ?? {});
+  const snapshot = buildSettingsSnapshot(
+    geminiEnabled,
+    duplicateEnabled,
+    loaded?.settings ?? {}
+  );
   const result = await saveSettingsWithFallback(snapshot);
   const areaLabel = result.area === "sync" ? "sync" : "local";
   let reason = "";
