@@ -25,3 +25,7 @@ coverage/
 # Build output (future proofing)
 dist/
 build/
+dist.zip
+
+# temp files
+tmp/

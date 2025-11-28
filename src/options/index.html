@@ -2,117 +2,129 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8">
-    <title>MF Subscription Checker 設定</title>
+    <title>MoneyForward Toolpack 設定</title>
     <link rel="stylesheet" href="./style.css">
   </head>
   <body>
-    <h1>設定</h1>
-    <p class="subtitle">同期上限超過時は自動でローカル保存に切り替わります。</p>
+    <div class="bg-layer" aria-hidden="true"></div>
+    <main class="shell">
+      <header class="hero">
+        <div class="pill">Settings</div>
+        <div class="hero-text">
+          <h1>MoneyForward Toolpack</h1>
+          <p class="subtitle">AI で家計簿をスマートに管理。連携と解析をここでコントロール。</p>
+        </div>
+      </header>
 
-    <div class="field">
-      <label for="apiKey">
-        Gemini APIキー <span aria-hidden="true">（必須）</span>
-      </label>
-      <div class="row-inline">
-        <input
-          id="apiKey"
-          type="password"
-          autocomplete="off"
-          aria-required="true"
-          class="flex-1"
-        >
-        <label class="row-inline" style="gap:4px; font-size:12px; margin:0;">
-          <input id="toggleApiKey" type="checkbox">
-          表示
-        </label>
-      </div>
-      <div id="apiKeyError" class="error" role="alert" aria-live="polite"></div>
-    </div>
+      <section class="card">
+        <h2>接続</h2>
+        <p class="helper">Gemini APIキーを保存して、解析を有効化します。</p>
+        <div class="field">
+          <label for="apiKey">
+            Gemini APIキー <span aria-hidden="true">（必須）</span>
+          </label>
+          <div class="row-inline tight">
+            <input
+              id="apiKey"
+              type="password"
+              autocomplete="off"
+              aria-required="true"
+              class="flex-1"
+            >
+            <label class="toggle-visibility">
+              <input id="toggleApiKey" type="checkbox">
+              表示
+            </label>
+          </div>
+          <div id="apiKeyError" class="error" role="alert" aria-live="polite"></div>
+        </div>
+      </section>
 
-    <div class="field">
-      <label for="threshold">サブスクしきい値 (0-100)</label>
-      <input id="threshold" type="number" min="0" max="100" step="1" value="70">
-      <div
-        id="thresholdError"
-        class="error"
-        role="alert"
-        aria-live="polite"
-      ></div>
-    </div>
+      <section class="card">
+        <h2>解析パラメータ</h2>
+        <div class="field">
+          <label for="threshold">サブスクしきい値 (0-100)</label>
+          <input id="threshold" type="number" min="0" max="100" step="1" value="70">
+          <div
+            id="thresholdError"
+            class="error"
+            role="alert"
+            aria-live="polite"
+          ></div>
+        </div>
 
-    <div class="field">
-      <label for="model">モデル</label>
-      <select id="model"></select>
-      <div
-        id="customModelWrapper"
-        class="row-inline hidden"
-        style="margin-top:8px;"
-      >
-        <input
-          id="customModelInput"
-          type="text"
-          placeholder="任意のモデルIDを入力"
-          autocomplete="off"
-          class="flex-1"
-        >
-      </div>
-      <div
-        id="customModelError"
-        class="error"
-        role="alert"
-        aria-live="polite"
-      ></div>
-      <p class="note">
-        デフォルト: Gemini 2.5 Flash（高速・低コスト）。精度重視なら 2.5
-        Pro、検証目的なら 3 Pro Preview
-        を選択。カスタムで任意モデルIDも指定可能。
-      </p>
-    </div>
+        <div class="field">
+          <label for="model">モデル</label>
+          <select id="model"></select>
+          <div id="customModelWrapper" class="row-inline hidden tight" aria-live="polite">
+            <input
+              id="customModelInput"
+              type="text"
+              placeholder="任意のモデルIDを入力"
+              autocomplete="off"
+              class="flex-1"
+            >
+          </div>
+          <div
+            id="customModelError"
+            class="error"
+            role="alert"
+            aria-live="polite"
+          ></div>
+          <p class="note">
+            デフォルト: Gemini 2.5 Flash。精度重視なら 2.5 Pro、実験なら 3 Pro Preview。
+          </p>
+        </div>
+      </section>
 
-    <div class="field">
-      <div class="row-inline" style="justify-content: space-between;">
-        <div>
-          <div style="font-weight:600;">Gemini解析を有効にする</div>
-          <div class="note">
-            OFF にすると解析は実行されず、Popup の再解析ボタンも無効化されます。
+      <section class="card grid">
+        <div class="field">
+          <div class="row-inline between">
+            <div>
+              <div class="field-title">Gemini解析を有効にする</div>
+              <div class="note">
+                OFF で解析は実行されず、ポップアップの再解析ボタンも無効化。
+              </div>
+            </div>
+            <label class="switch">
+              <input
+                id="geminiToggle"
+                type="checkbox"
+                aria-label="Gemini解析の有効/無効"
+              >
+              <span class="slider" aria-hidden="true"></span>
+            </label>
           </div>
         </div>
-        <label class="switch">
-          <input
-            id="geminiToggle"
-            type="checkbox"
-            aria-label="Gemini解析の有効/無効"
-          >
-          <span class="slider" aria-hidden="true"></span>
-        </label>
-      </div>
-    </div>
 
-    <div class="field">
-      <div class="row-inline" style="justify-content: space-between;">
-        <div>
-          <div style="font-weight:600;">二重計上チェックを有効にする</div>
-          <div class="note">
-            同日・同内容・同額の重複行に警告色を付けます。OFF
-            にすると警告表示を行いません。
+        <div class="field">
+          <div class="row-inline between">
+            <div>
+              <div class="field-title">二重計上チェックを有効にする</div>
+              <div class="note">
+                同日・同内容・同額の重複行をハイライト。OFF で警告を非表示。
+              </div>
+            </div>
+            <label class="switch">
+              <input
+                id="duplicateToggle"
+                type="checkbox"
+                aria-label="二重計上チェックの有効/無効"
+              >
+              <span class="slider" aria-hidden="true"></span>
+            </label>
           </div>
         </div>
-        <label class="switch">
-          <input
-            id="duplicateToggle"
-            type="checkbox"
-            aria-label="二重計上チェックの有効/無効"
-          >
-          <span class="slider" aria-hidden="true"></span>
-        </label>
-      </div>
-    </div>
+      </section>
 
-    <p class="note">
-      ※設定は同期を試行し、容量超過やエラー時はローカル保存にフォールバックします。
-    </p>
-    <button id="saveBtn" disabled>保存</button>
-    <div id="status" class="status" aria-live="polite"></div>
+      <section class="card actions">
+        <p class="note">設定は同期を試行し、容量超過やエラー時はローカル保存にフォールバックします。</p>
+        <div class="action-row">
+          <button id="saveBtn" disabled>保存して反映</button>
+          <div id="status" class="status" aria-live="polite"></div>
+        </div>
+      </section>
+    </main>
 
     <script type="module" src="./index.js"></script>
   </body>

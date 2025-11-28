@@ -2,24 +2,148 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8">
-    <title>MF Subscription Checker</title>
+    <title>MoneyForward Toolpack</title>
     <style>
-    body {
-      margin: 12px;
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      min-width: 220px;
-    }
-    button {
-      width: 100%;
-      padding: 10px 12px;
-      font-size: 14px;
-    }
+      :root {
+        color-scheme: light;
+        --bg: radial-gradient(circle at 20% 20%, #f3f6ff 0, #eef3ff 30%, #e7ecff 60%, #e8f2ff 100%);
+        --panel: rgba(255, 255, 255, 0.82);
+        --border: rgba(62, 92, 255, 0.18);
+        --shadow: 0 18px 40px rgba(27, 50, 120, 0.15);
+        --text: #0f1a3d;
+        --muted: #4a5775;
+        --accent: linear-gradient(120deg, #6c8bff, #3d6bff 50%, #2e54ff 100%);
+        --accent-strong: #2f4fff;
+        --radius: 14px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 14px;
+        min-width: 260px;
+        max-width: 360px;
+        font-family: "Space Grotesk", "Noto Sans JP", "Hiragino Sans", "BIZ UDGothic", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 16px 16px 14px;
+        backdrop-filter: blur(10px);
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #fff;
+        font-size: 12px;
+        letter-spacing: 0.02em;
+        font-weight: 600;
+        box-shadow: 0 10px 25px rgba(46, 84, 255, 0.25);
+      }
+
+      h1 {
+        font-size: 17px;
+        margin: 0;
+        letter-spacing: 0.01em;
+        line-height: 1.3;
+      }
+
+      p {
+        margin: 0 0 14px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .actions {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      button {
+        width: 100%;
+        border: none;
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease, background 180ms ease;
+      }
+
+      button:focus-visible {
+        outline: 2px solid #2f4fff;
+        outline-offset: 2px;
+      }
+
+      #openOptions {
+        background: var(--accent);
+        color: #fff;
+        box-shadow: 0 12px 28px rgba(46, 84, 255, 0.28);
+      }
+
+      #openOptions:hover {
+        transform: translateY(-1px);
+      }
+
+      #rerunGemini {
+        background: #f5f7ff;
+        color: var(--accent-strong);
+        border: 1px solid var(--border);
+      }
+
+      #rerunGemini:hover:not(:disabled) {
+        background: #eef2ff;
+        transform: translateY(-1px);
+      }
+
+      #rerunGemini:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .hint {
+        margin-top: 8px;
+        font-size: 11.5px;
+        color: var(--muted);
+        text-align: center;
+      }
     </style>
   </head>
   <body>
-    <h3>MF Subscription Checker</h3>
-    <button id="openOptions">設定を開く</button>
-    <button id="rerunGemini" style="margin-top:8px;">このページで再解析</button>
+    <div class="panel" role="presentation">
+      <header>
+        <span aria-hidden="true" class="badge">AI Assist</span>
+        <h1 aria-label="MoneyForward Toolpack">MoneyForward Toolpack</h1>
+      </header>
+      <p>家計簿ページをAIで解析し、サブスク候補を賢く管理。設定変更や再解析はここからすぐに実行できます。</p>
+      <div class="actions">
+        <button id="openOptions" type="button">設定を開く</button>
+        <button id="rerunGemini" type="button">このページで再解析</button>
+      </div>
+      <div class="hint">固定費の見直しをシンプルに。</div>
+    </div>
     <script type="module" src="./index.js" defer></script>
   </body>
 </html>
