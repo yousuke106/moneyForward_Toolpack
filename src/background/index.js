@@ -1,14 +1,18 @@
 /* globals chrome */
 import { loadSettings } from "../data/storage.js";
+import {
+  BADGE_COLORS,
+  buildCsvFilename,
+  buildCsvRequestUrl,
+  dequeueNextFilename,
+  HEADER_SELECTORS,
+  isDownloaderEnabled,
+  parseMonthFromHeader,
+} from "./downloader-utils.js";
 
 const TIMEOUT_MS = 60_000;
 const MENU_ID = "mf-download-visible-month";
 const BADGE_CLEAR_DELAY = 2800;
-const DOWNLOAD_PREFIX = "moneyforward_";
-
-const HEADER_MONTH_REGEX = /(\d{4})\D+(\d{1,2})/;
-const HEADER_SELECTORS = ["span.fc-header-title", ".fc-header-title"];
-
 const pendingDownloadNames = [];
 let badgeResetHandle = 0;
 let downloadContextMenuEnabled = true;
@@ -45,8 +49,6 @@ const extractJson = (data) => {
   }
   return parsed;
 };
-
-const padMonth = (value) => String(value).padStart(2, "0");
 
 const setBadge = async (text, color) => {
   if (!chrome?.action) {
@@ -97,26 +99,6 @@ const extractHeaderFromTab = async (tabId) => {
   }
 };
 
-const parseMonthFromHeader = (raw) => {
-  if (!raw) {
-    return null;
-  }
-  const normalized = raw.trim();
-  const match = normalized.match(HEADER_MONTH_REGEX);
-  if (!match) {
-    return null;
-  }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  if (!(Number.isFinite(year) && Number.isFinite(month))) {
-    return null;
-  }
-  if (month < 1 || month > 12) {
-    return null;
-  }
-  return { year, month };
-};
-
 const fetchCsvViaPage = async (tabId, requestUrl) => {
   try {
     const [result] = await chrome.scripting.executeScript({
@@ -155,23 +137,23 @@ const fetchCsvViaPage = async (tabId, requestUrl) => {
 };
 
 const triggerCsvDownload = async (tabId, parsed) => {
-  const requestUrl = `https://moneyforward.com/cf/csv?from=${parsed.year}%2F${padMonth(parsed.month)}%2F01&month=${parsed.month}&year=${parsed.year}`;
+  const requestUrl = buildCsvRequestUrl(parsed);
   const result = await fetchCsvViaPage(tabId, requestUrl);
   if (!result || result.status !== "ok" || !result.dataUrl) {
-    await setBadge("NG", "#dc2626");
+    await setBadge("NG", BADGE_COLORS.error);
     return;
   }
-  const filename = `${DOWNLOAD_PREFIX}${parsed.year}${padMonth(parsed.month)}.csv`;
+  const filename = buildCsvFilename(parsed);
   pendingDownloadNames.push(filename);
   try {
     await chrome.downloads.download({
       url: result.dataUrl,
       saveAs: true,
     });
-    await setBadge("DL", "#10b981");
+    await setBadge("DL", BADGE_COLORS.success);
   } catch {
     pendingDownloadNames.pop();
-    await setBadge("NG", "#dc2626");
+    await setBadge("NG", BADGE_COLORS.error);
   }
 };
 
@@ -181,18 +163,18 @@ const handleContextClick = async (info, tab) => {
   }
   const tabId = info.tabId ?? tab?.id;
   if (typeof tabId !== "number") {
-    await setBadge("NA", "#dc2626");
+    await setBadge("NA", BADGE_COLORS.error);
     return;
   }
 
   const header = await extractHeaderFromTab(tabId);
   const parsed = parseMonthFromHeader(header);
   if (!parsed) {
-    await setBadge("NA", "#dc2626");
+    await setBadge("NA", BADGE_COLORS.error);
     return;
   }
 
-  const isoMonth = `${parsed.year}-${padMonth(parsed.month)}`;
+  const isoMonth = `${parsed.year}-${String(parsed.month).padStart(2, "0")}`;
   await chrome.storage.sync.set({ mf_month_year: isoMonth });
   await triggerCsvDownload(tabId, parsed);
 };
@@ -217,8 +199,7 @@ const refreshContextMenu = (enabled) => {
 const syncDownloaderToggle = async () => {
   try {
     const result = await loadSettings();
-    const enabled =
-      result?.settings?.featureFlags?.downloaderContextMenuEnabled ?? true;
+    const enabled = isDownloaderEnabled(result?.settings);
     downloadContextMenuEnabled = enabled;
     refreshContextMenu(enabled);
   } catch {
@@ -228,12 +209,12 @@ const syncDownloaderToggle = async () => {
 };
 
 chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
-  if (item.byExtensionId === chrome.runtime.id && pendingDownloadNames.length) {
-    const nextName = pendingDownloadNames.shift();
-    suggest({ filename: nextName, conflictAction: "uniquify" });
-    return;
-  }
-  suggest({});
+  const nextName = dequeueNextFilename(
+    pendingDownloadNames,
+    item,
+    chrome.runtime.id
+  );
+  suggest(nextName ? { filename: nextName, conflictAction: "uniquify" } : {});
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -314,8 +295,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "sync" || areaName === "local") {
     const updatedSettings = changes.settings?.newValue;
     if (updatedSettings) {
-      const enabled =
-        updatedSettings.featureFlags?.downloaderContextMenuEnabled ?? true;
+      const enabled = isDownloaderEnabled(updatedSettings);
       downloadContextMenuEnabled = enabled;
       refreshContextMenu(enabled);
     }
