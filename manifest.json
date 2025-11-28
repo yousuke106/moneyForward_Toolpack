@@ -8,7 +8,14 @@
     "48": "src/assets/icons/icon48.png",
     "128": "src/assets/icons/icon128.png"
   },
-  "permissions": ["storage", "unlimitedStorage"],
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "downloads",
+    "scripting",
+    "tabs",
+    "contextMenus"
+  ],
   "optional_permissions": ["activeTab"],
   "host_permissions": [
     "https://moneyforward.com/*",

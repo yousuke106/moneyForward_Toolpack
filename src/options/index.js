@@ -13,6 +13,7 @@ const apiKeyErrorEl = document.getElementById("apiKeyError");
 const thresholdErrorEl = document.getElementById("thresholdError");
 const geminiToggle = document.getElementById("geminiToggle");
 const duplicateToggle = document.getElementById("duplicateToggle");
+const downloaderToggle = document.getElementById("downloaderToggle");
 
 const CUSTOM_MODEL_VALUE = "__custom__";
 const DEFAULT_THRESHOLD = 70;
@@ -99,6 +100,7 @@ const validate = () => {
       : modelValue;
   const geminiEnabled = geminiToggle?.checked ?? true;
   const duplicateEnabled = duplicateToggle?.checked ?? true;
+  const downloaderEnabled = downloaderToggle?.checked ?? true;
   return {
     valid,
     apiKey,
@@ -106,6 +108,7 @@ const validate = () => {
     model: resolvedModel,
     geminiEnabled,
     duplicateEnabled,
+    downloaderEnabled,
   };
 };
 
@@ -127,6 +130,7 @@ const resolveModelValue = (loadedModel) => {
 const buildSettingsSnapshot = (
   geminiEnabled,
   duplicateEnabled,
+  downloaderEnabled,
   loadedSettings = {}
 ) => {
   const apiKeyFallback = loadedSettings.geminiApiKey ?? "";
@@ -150,6 +154,7 @@ const buildSettingsSnapshot = (
     featureFlags: {
       geminiAnalysisEnabled: geminiEnabled,
       duplicateCheckEnabled: duplicateEnabled,
+      downloaderContextMenuEnabled: downloaderEnabled,
     },
   };
 };
@@ -176,11 +181,16 @@ const applySettingsToUi = (settings, area) => {
   }
   const geminiEnabled = settings.featureFlags?.geminiAnalysisEnabled ?? true;
   const duplicateEnabled = settings.featureFlags?.duplicateCheckEnabled ?? true;
+  const downloaderEnabled =
+    settings.featureFlags?.downloaderContextMenuEnabled ?? true;
   if (geminiToggle) {
     geminiToggle.checked = geminiEnabled;
   }
   if (duplicateToggle) {
     duplicateToggle.checked = duplicateEnabled;
+  }
+  if (downloaderToggle) {
+    downloaderToggle.checked = downloaderEnabled;
   }
   renderStatus(`ロード元: ${area === "sync" ? "sync" : "local"}`);
 };
@@ -195,6 +205,9 @@ const load = async () => {
     if (duplicateToggle) {
       duplicateToggle.checked = true;
     }
+    if (downloaderToggle) {
+      downloaderToggle.checked = true;
+    }
     renderStatus("未保存です。設定を入力してください。");
     validate();
     return;
@@ -204,8 +217,15 @@ const load = async () => {
   validate();
 };
 const onSave = async () => {
-  const { valid, apiKey, threshold, model, geminiEnabled, duplicateEnabled } =
-    validate();
+  const {
+    valid,
+    apiKey,
+    threshold,
+    model,
+    geminiEnabled,
+    duplicateEnabled,
+    downloaderEnabled,
+  } = validate();
   if (!valid) {
     return;
   }
@@ -217,6 +237,7 @@ const onSave = async () => {
     featureFlags: {
       geminiAnalysisEnabled: geminiEnabled,
       duplicateCheckEnabled: duplicateEnabled,
+      downloaderContextMenuEnabled: downloaderEnabled,
     },
   };
   const result = await saveSettingsWithFallback(settings);
@@ -246,8 +267,9 @@ if (geminiToggle) {
     validate();
     const geminiEnabled = geminiToggle.checked;
     const duplicateEnabled = duplicateToggle?.checked ?? true;
-    saveFeatureToggle(geminiEnabled, duplicateEnabled).catch((error) =>
-      renderStatus(`保存に失敗しました: ${error.message}`, true)
+    const downloaderEnabled = downloaderToggle?.checked ?? true;
+    saveFeatureToggle(geminiEnabled, duplicateEnabled, downloaderEnabled).catch(
+      (error) => renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
   });
 }
@@ -257,17 +279,35 @@ if (duplicateToggle) {
     validate();
     const geminiEnabled = geminiToggle?.checked ?? true;
     const duplicateEnabled = duplicateToggle.checked;
-    saveFeatureToggle(geminiEnabled, duplicateEnabled).catch((error) =>
-      renderStatus(`保存に失敗しました: ${error.message}`, true)
+    const downloaderEnabled = downloaderToggle?.checked ?? true;
+    saveFeatureToggle(geminiEnabled, duplicateEnabled, downloaderEnabled).catch(
+      (error) => renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
   });
 }
 
-const saveFeatureToggle = async (geminiEnabled, duplicateEnabled) => {
+if (downloaderToggle) {
+  downloaderToggle.addEventListener("change", () => {
+    validate();
+    const geminiEnabled = geminiToggle?.checked ?? true;
+    const duplicateEnabled = duplicateToggle?.checked ?? true;
+    const downloaderEnabled = downloaderToggle.checked;
+    saveFeatureToggle(geminiEnabled, duplicateEnabled, downloaderEnabled).catch(
+      (error) => renderStatus(`保存に失敗しました: ${error.message}`, true)
+    );
+  });
+}
+
+const saveFeatureToggle = async (
+  geminiEnabled,
+  duplicateEnabled,
+  downloaderEnabled
+) => {
   const loaded = await loadSettings();
   const snapshot = buildSettingsSnapshot(
     geminiEnabled,
     duplicateEnabled,
+    downloaderEnabled,
     loaded?.settings ?? {}
   );
   const result = await saveSettingsWithFallback(snapshot);

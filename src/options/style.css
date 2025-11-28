@@ -1,6 +1,12 @@
 :root {
   color-scheme: light;
-  --bg: radial-gradient(circle at 15% 20%, #f6f8ff 0, #ecf0ff 35%, #e6edff 60%, #e9f5ff 100%);
+  --bg: radial-gradient(
+    circle at 15% 20%,
+    #f6f8ff 0,
+    #ecf0ff 35%,
+    #e6edff 60%,
+    #e9f5ff 100%
+  );
   --panel: rgba(255, 255, 255, 0.82);
   --border: rgba(60, 90, 200, 0.14);
   --shadow: 0 22px 60px rgba(19, 38, 95, 0.16);
@@ -20,7 +26,8 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Space Grotesk", "Noto Sans JP", "Hiragino Sans", "BIZ UDGothic", sans-serif;
+  font-family:
+    "Space Grotesk", "Noto Sans JP", "Hiragino Sans", "BIZ UDGothic", sans-serif;
   background: var(--bg);
   color: var(--text);
 }
@@ -28,8 +35,17 @@ body {
 .bg-layer {
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at 80% 10%, rgba(89, 124, 255, 0.25), transparent 30%),
-    radial-gradient(circle at 10% 70%, rgba(57, 185, 255, 0.18), transparent 32%);
+  background:
+    radial-gradient(
+      circle at 80% 10%,
+      rgba(89, 124, 255, 0.25),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 10% 70%,
+      rgba(57, 185, 255, 0.18),
+      transparent 32%
+    );
   filter: blur(20px);
   pointer-events: none;
   z-index: 0;
@@ -118,7 +134,9 @@ select {
   border: 1px solid var(--input-border);
   border-radius: 10px;
   background: var(--input-bg);
-  transition: border 120ms ease, box-shadow 120ms ease;
+  transition:
+    border 120ms ease,
+    box-shadow 120ms ease;
 }
 
 input:focus,
@@ -154,7 +172,10 @@ button {
   cursor: pointer;
   font-weight: 800;
   letter-spacing: 0.01em;
-  transition: transform 120ms ease, box-shadow 150ms ease, background 160ms ease;
+  transition:
+    transform 120ms ease,
+    box-shadow 150ms ease,
+    background 160ms ease;
   box-shadow: 0 16px 40px rgba(46, 84, 255, 0.28);
 }
 

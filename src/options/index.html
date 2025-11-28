@@ -12,7 +12,9 @@
         <div class="pill">Settings</div>
         <div class="hero-text">
           <h1>MoneyForward Toolpack</h1>
-          <p class="subtitle">AI で家計簿をスマートに管理。連携と解析をここでコントロール。</p>
+          <p class="subtitle">
+            AI で家計簿をスマートに管理。連携と解析をここでコントロール。
+          </p>
         </div>
       </header>
 
@@ -36,7 +38,12 @@
               表示
             </label>
           </div>
-          <div id="apiKeyError" class="error" role="alert" aria-live="polite"></div>
+          <div
+            id="apiKeyError"
+            class="error"
+            role="alert"
+            aria-live="polite"
+          ></div>
         </div>
       </section>
 
@@ -44,7 +51,14 @@
         <h2>解析パラメータ</h2>
         <div class="field">
           <label for="threshold">サブスクしきい値 (0-100)</label>
-          <input id="threshold" type="number" min="0" max="100" step="1" value="70">
+          <input
+            id="threshold"
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+            value="70"
+          >
           <div
             id="thresholdError"
             class="error"
@@ -56,7 +70,11 @@
         <div class="field">
           <label for="model">モデル</label>
           <select id="model"></select>
-          <div id="customModelWrapper" class="row-inline hidden tight" aria-live="polite">
+          <div
+            id="customModelWrapper"
+            class="row-inline hidden tight"
+            aria-live="polite"
+          >
             <input
               id="customModelInput"
               type="text"
@@ -72,7 +90,8 @@
             aria-live="polite"
           ></div>
           <p class="note">
-            デフォルト: Gemini 2.5 Flash。精度重視なら 2.5 Pro、実験なら 3 Pro Preview。
+            デフォルト: Gemini 2.5 Flash。精度重視なら 2.5 Pro、実験なら 3 Pro
+            Preview。
           </p>
         </div>
       </section>
@@ -115,10 +134,32 @@
             </label>
           </div>
         </div>
+
+        <div class="field">
+          <div class="row-inline between">
+            <div>
+              <div class="field-title">右クリックで家計簿CSVをダウンロード</div>
+              <div class="note">
+                ON: 家計簿ページで右クリックメニューから当月CSVを保存。OFF:
+                メニューを非表示/無効化。
+              </div>
+            </div>
+            <label class="switch">
+              <input
+                id="downloaderToggle"
+                type="checkbox"
+                aria-label="家計簿CSVダウンロードメニューの有効/無効"
+              >
+              <span class="slider" aria-hidden="true"></span>
+            </label>
+          </div>
+        </div>
       </section>
 
       <section class="card actions">
-        <p class="note">設定は同期を試行し、容量超過やエラー時はローカル保存にフォールバックします。</p>
+        <p class="note">
+          設定は同期を試行し、容量超過やエラー時はローカル保存にフォールバックします。
+        </p>
         <div class="action-row">
           <button id="saveBtn" disabled>保存して反映</button>
           <div id="status" class="status" aria-live="polite"></div>
