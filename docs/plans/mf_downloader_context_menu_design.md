@@ -39,18 +39,18 @@
 - トグルで無効化した際にメニュー非表示を行う場合、ストレージ変化を受けて動的に `contextMenus` を再構築する必要がある。非表示漏れや競合に注意。
 
 ## 移植タスク（ドラフト・漏れチェック反映）
-- [ ] manifest に `contextMenus`, `downloads`, `scripting`, `tabs` と `cf/csv` 系 host permissions を追加。permissions 追加理由を README/ストア説明に追記。
-- [ ] 背景スクリプトにコンテキストメニュー作成・クリックハンドラ・バッジ処理・CSV取得ロジックを組み込み（ESM対応）。
-- [ ] `mf_month_year` 保存/復元が既存 UI と競合しないことを確認し、ポップアップ初期化で共用するか明示。
+- [x] manifest に `contextMenus`, `downloads`, `scripting`, `tabs` と `cf/csv` 系 host permissions を追加。permissions 追加理由を README/ストア説明に追記。
+- [x] 背景スクリプトにコンテキストメニュー作成・クリックハンドラ・バッジ処理・CSV取得ロジックを組み込み（ESM対応）。
+- [x] `mf_month_year` 保存/復元が既存 UI と競合しないことを確認し、ポップアップ初期化で共用するか明示。
 - [ ] DOM 抽出セレクタ・正規表現をユニット化し、将来差し替えやすくする（単体テスト可能な純粋関数化を含む）。
-- [ ] downloads filename キューの onDeterminingFilename リスナーを実装し、他URLダウンロードへの影響を抑止（拡張ID・フラグでガード）。
-- [ ] 未ログイン時はバッジで失敗を通知するだけである旨を README/リリースノートに明記。
-- [ ] 設定トグルを追加（デフォルトON）。OFF時にコンテキストメニューを非表示または無効化し、背景SWが設定変更を監視して即時反映する。
-- [ ] オプション画面にトグルUIを追加し、保存・初期表示・バリデーションを既存設定フローに統合。
-- [ ] 設定スキーマに feature flag を追加し、デフォルト値／マイグレーションを定義。
+- [x] downloads filename キューの onDeterminingFilename リスナーを実装し、他URLダウンロードへの影響を抑止（拡張ID・フラグでガード）。
+- [x] 未ログイン時はバッジで失敗を通知するだけである旨を README/リリースノートに明記。
+- [x] 設定トグルを追加（デフォルトON）。OFF時にコンテキストメニューを非表示または無効化し、背景SWが設定変更を監視して即時反映する。
+- [x] オプション画面にトグルUIを追加し、保存・初期表示・バリデーションを既存設定フローに統合。
+- [x] 設定スキーマに feature flag を追加し、デフォルト値／マイグレーションを定義。
 - [ ] バッジ表示/クリアの共通化（既存 action バッジ利用ポリシーと整合）と色定義の定数化。
 - [ ] 単体テスト: 月抽出パーサ、リクエストURL組み立て、トグルOFF時のメニュー非生成、ファイル名キューのガード。
-- [ ] 手動確認: `docs/checklists/mf_downloader_context_menu_checklist.md` を実施。
+- [x] 手動確認: `docs/checklists/mf_downloader_context_menu_checklist.md` を実施。
 
 ## コード品質チェック（カテゴリ別）
 - **背景サービスワーカー**: ESM 構造を維持、async/await で例外を適切に捕捉、タイマー/リスナーのクリーンアップ、`chrome.runtime.id` でダウンロード識別。
