@@ -7,6 +7,7 @@ const BADGE_CLEAR_DELAY = 2800;
 const DOWNLOAD_PREFIX = "moneyforward_";
 
 const HEADER_MONTH_REGEX = /(\d{4})\D+(\d{1,2})/;
+const HEADER_SELECTORS = ["span.fc-header-title", ".fc-header-title"];
 
 const pendingDownloadNames = [];
 let badgeResetHandle = 0;
@@ -69,15 +70,17 @@ const extractHeaderFromTab = async (tabId) => {
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
-      func: () => {
-        const elements = Array.from(
-          document.querySelectorAll("span.fc-header-title")
-        );
+      func: (selectors) => {
+        const elements = [];
+        for (const selector of selectors) {
+          elements.push(...document.querySelectorAll(selector));
+        }
         const candidate = elements.find(
           (element) => element?.textContent?.trim().length
         );
         return candidate ? candidate.textContent : null;
       },
+      args: [HEADER_SELECTORS],
     });
     for (const frameResult of results) {
       if (
