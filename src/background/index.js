@@ -188,12 +188,26 @@ const createContextMenu = () => {
   });
 };
 
+// Serialize menu rebuilds to avoid duplicate-id errors when multiple triggers fire in quick succession.
+let refreshContextMenuChain = Promise.resolve();
+
 const refreshContextMenu = (enabled) => {
-  chrome.contextMenus.removeAll(() => {
-    if (enabled) {
-      createContextMenu();
-    }
-  });
+  refreshContextMenuChain = refreshContextMenuChain
+    .catch(() => {
+      /* reset on previous failure */
+    })
+    .then(
+      () =>
+        new Promise((resolve) => {
+          chrome.contextMenus.removeAll(() => {
+            if (enabled) {
+              createContextMenu();
+            }
+            resolve();
+          });
+        })
+    );
+  return refreshContextMenuChain;
 };
 
 const syncDownloaderToggle = async () => {
@@ -201,10 +215,10 @@ const syncDownloaderToggle = async () => {
     const result = await loadSettings();
     const enabled = isDownloaderEnabled(result?.settings);
     downloadContextMenuEnabled = enabled;
-    refreshContextMenu(enabled);
+    await refreshContextMenu(enabled);
   } catch {
     downloadContextMenuEnabled = true;
-    refreshContextMenu(true);
+    await refreshContextMenu(true);
   }
 };
 
@@ -297,7 +311,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     if (updatedSettings) {
       const enabled = isDownloaderEnabled(updatedSettings);
       downloadContextMenuEnabled = enabled;
-      refreshContextMenu(enabled);
+      refreshContextMenu(enabled).catch(() => {
+        /* ignore */
+      });
     }
   }
 });
