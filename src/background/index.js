@@ -179,14 +179,35 @@ const handleContextClick = async (info, tab) => {
   await triggerCsvDownload(tabId, parsed);
 };
 
-const createContextMenu = () => {
-  chrome.contextMenus.create({
-    id: MENU_ID,
-    title: "表示中の年月の家計簿CSVをダウンロード",
-    contexts: ["page"],
-    documentUrlPatterns: ["https://moneyforward.com/*"],
+const createContextMenu = () =>
+  new Promise((resolve) => {
+    chrome.contextMenus.create(
+      {
+        id: MENU_ID,
+        title: "表示中の年月の家計簿CSVをダウンロード",
+        contexts: ["page"],
+        documentUrlPatterns: ["https://moneyforward.com/*"],
+      },
+      () => {
+        // Ignore duplicate-id errors that can occur when normal/incognito SWs race.
+        if (chrome.runtime.lastError) {
+          // noop
+        }
+        resolve();
+      }
+    );
   });
-};
+
+const removeContextMenu = () =>
+  new Promise((resolve) => {
+    chrome.contextMenus.remove(MENU_ID, () => {
+      // menu may not exist; ignore errors
+      if (chrome.runtime.lastError) {
+        // noop
+      }
+      resolve();
+    });
+  });
 
 // Serialize menu rebuilds to avoid duplicate-id errors when multiple triggers fire in quick succession.
 let refreshContextMenuChain = Promise.resolve();
@@ -196,16 +217,12 @@ const refreshContextMenu = (enabled) => {
     .catch(() => {
       /* reset on previous failure */
     })
-    .then(
-      () =>
-        new Promise((resolve) => {
-          chrome.contextMenus.removeAll(() => {
-            if (enabled) {
-              createContextMenu();
-            }
-            resolve();
-          });
-        })
+    .then(() =>
+      removeContextMenu().then(() => {
+        if (enabled) {
+          return createContextMenu();
+        }
+      })
     );
   return refreshContextMenuChain;
 };
