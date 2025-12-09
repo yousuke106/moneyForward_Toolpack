@@ -9,3 +9,4 @@
 - `code_review_ui_implementation.md` : UI 実装レビュー観点。
 - `feature_toggle_gemini_off.md` : Gemini 機能のオフ操作チェック。
 - `mf_downloader_context_menu_checklist.md` : 家計簿CSV右クリックダウンロード移植後の動作確認チェックリスト。
+- `budget_category_rules_checklist.md` : 大項目×中項目ルール警告機能の動作確認チェックリスト。

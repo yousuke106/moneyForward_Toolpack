@@ -27,6 +27,17 @@
   border-left: 4px solid #f08c00;
 }
 
+.mf-sub-category-alert-row {
+  border-left: 4px solid #e8574c;
+  transition:
+    background-color 120ms ease-in-out,
+    border-color 120ms ease-in-out;
+}
+
+.mf-sub-category-alert-cell {
+  background-color: rgba(232, 87, 76, 0.22) !important;
+}
+
 .mf-sub-select {
   min-width: 90px;
   max-width: 140px;

@@ -1,11 +1,61 @@
+import { validateCategoryRules } from "./category-rules.js";
+
 const SYNC_THRESHOLD_BYTES = 90 * 1024;
 const SYNC_TOTAL_LIMIT_BYTES = 100 * 1024;
 const SETTINGS_KEY = "settings";
+
+const DEFAULT_FEATURE_FLAGS = {
+  geminiAnalysisEnabled: true,
+  duplicateCheckEnabled: true,
+  downloaderContextMenuEnabled: true,
+  categoryRuleAlertEnabled: true,
+};
+
+const DEFAULT_CATEGORY_RULES = {
+  whitelist: [],
+  blacklist: [],
+};
+
+const DEFAULT_SETTINGS = {
+  geminiApiKey: "",
+  scoreThreshold: 70,
+  model: "gemini-2.5-flash",
+  featureFlags: DEFAULT_FEATURE_FLAGS,
+  categoryRules: DEFAULT_CATEGORY_RULES,
+};
 
 const hasChromeStorage = () =>
   typeof globalThis.chrome !== "undefined" &&
   globalThis.chrome?.storage?.sync &&
   globalThis.chrome?.storage?.local;
+
+const normalizeSettings = (settings = {}) => {
+  const featureFlags = {
+    ...DEFAULT_FEATURE_FLAGS,
+    ...(settings.featureFlags ?? {}),
+  };
+  const categoryRules = {
+    ...DEFAULT_CATEGORY_RULES,
+    ...(settings.categoryRules ?? {}),
+  };
+
+  return {
+    ...DEFAULT_SETTINGS,
+    ...settings,
+    featureFlags,
+    categoryRules,
+  };
+};
+
+const validateSettings = (settings = {}) => {
+  const normalized = normalizeSettings(settings);
+  const { categoryRules } = normalized;
+  const validation = validateCategoryRules(categoryRules);
+  if (!validation.ok) {
+    return { ok: false, errors: validation.errors };
+  }
+  return { ok: true, settings: normalized };
+};
 
 const promisify = (fn) =>
   new Promise((resolve, reject) => {
@@ -47,17 +97,25 @@ export const saveSettingsWithFallback = async (settings) => {
     throw new Error("chrome.storage is unavailable in this context");
   }
 
+  const validation = validateSettings(settings);
+  if (!validation.ok) {
+    const message = `invalid_settings:${validation.errors.join(",")}`;
+    throw new Error(message);
+  }
+
+  const normalized = validation.settings;
+
   const bytes = await getBytesInUse().catch(() => SYNC_TOTAL_LIMIT_BYTES);
   if (bytes >= SYNC_THRESHOLD_BYTES) {
-    await setLocal(settings);
+    await setLocal(normalized);
     return { area: "local", reason: "sync_threshold" };
   }
 
   try {
-    await setSync(settings);
+    await setSync(normalized);
     return { area: "sync" };
   } catch (error) {
-    await setLocal(settings);
+    await setLocal(normalized);
     return { area: "local", reason: "sync_error", error };
   }
 };
@@ -70,13 +128,19 @@ export const loadSettings = async () => {
     globalThis.chrome.storage.sync.get(SETTINGS_KEY, cb)
   ).catch(() => null);
   if (syncResult?.[SETTINGS_KEY]) {
-    return { settings: syncResult[SETTINGS_KEY], area: "sync" };
+    return {
+      settings: normalizeSettings(syncResult[SETTINGS_KEY]),
+      area: "sync",
+    };
   }
   const localResult = await promisify((cb) =>
     globalThis.chrome.storage.local.get(SETTINGS_KEY, cb)
   ).catch(() => null);
   if (localResult?.[SETTINGS_KEY]) {
-    return { settings: localResult[SETTINGS_KEY], area: "local" };
+    return {
+      settings: normalizeSettings(localResult[SETTINGS_KEY]),
+      area: "local",
+    };
   }
   return null;
 };
@@ -135,3 +199,5 @@ export const saveLabel = async ({ txKey, storeAmountKey, label }) => {
     setLocalBulk(LOCAL_KEYS.byStoreAmount, labelsByStoreAmount),
   ]);
 };
+
+export { normalizeSettings, validateSettings };

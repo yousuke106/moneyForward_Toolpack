@@ -5,3 +5,4 @@
 - `mf_options_wireframe.md` : オプション画面のUIワイヤーフレームと文言・状態遷移の定義。
 - `duplicate_check_design.md` : 二重計上チェック機能の詳細設計と実装タスク一覧。
 - `mf_downloader_context_menu_design.md` : 家計簿CSVを右クリックメニューからダウンロードする機能の移植設計メモとタスク草案。
+- `budget_category_rules_design.md` : 大項目×中項目の組み合わせ警告表示の詳細設計と実装タスク。
