@@ -1,22 +1,28 @@
 :root {
   color-scheme: light;
-  --bg: radial-gradient(
-    circle at 15% 20%,
-    #f6f8ff 0,
-    #ecf0ff 35%,
-    #e6edff 60%,
-    #e9f5ff 100%
-  );
-  --panel: rgba(255, 255, 255, 0.82);
-  --border: rgba(60, 90, 200, 0.14);
-  --shadow: 0 22px 60px rgba(19, 38, 95, 0.16);
+  --bg:
+    radial-gradient(140% 180% at 10% 12%, #f7f9ff 0%, #eef2ff 40%, #e5edff 80%),
+    radial-gradient(
+      160% 160% at 92% 8%,
+      rgba(90, 132, 255, 0.16),
+      transparent 55%
+    ),
+    radial-gradient(
+      120% 160% at 15% 80%,
+      rgba(70, 190, 255, 0.12),
+      transparent 60%
+    );
+  --panel: rgba(255, 255, 255, 0.9);
+  --border: rgba(60, 90, 200, 0.12);
+  --shadow: 0 22px 60px rgba(19, 38, 95, 0.14);
   --text: #0f1a3d;
   --muted: #4b5678;
   --accent: linear-gradient(120deg, #6c8bff, #3d6bff 50%, #2e54ff 100%);
   --accent-strong: #2f4fff;
+  --accent-soft: #e7ecff;
   --radius: 16px;
   --input-border: #c5cfee;
-  --input-bg: rgba(255, 255, 255, 0.9);
+  --input-bg: rgba(255, 255, 255, 0.94);
 }
 
 * {
@@ -97,6 +103,21 @@ body {
   box-shadow: var(--shadow);
   backdrop-filter: blur(12px);
   margin-top: 18px;
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    120deg,
+    rgba(108, 139, 255, 0.1),
+    transparent 35%
+  );
+  pointer-events: none;
 }
 
 .card h2 {

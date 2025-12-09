@@ -2,6 +2,7 @@ import { loadSettings } from "../data/storage.js";
 
 const openOptionsBtn = document.getElementById("openOptions");
 const rerunBtn = document.getElementById("rerunGemini");
+const geminiStatus = document.getElementById("geminiStatus");
 
 const applyToggleState = (enabled) => {
   if (!rerunBtn) {
@@ -11,9 +12,17 @@ const applyToggleState = (enabled) => {
   if (enabled) {
     rerunBtn.removeAttribute("title");
     rerunBtn.setAttribute("aria-disabled", "false");
+    if (geminiStatus) {
+      geminiStatus.textContent = "Gemini ON";
+      geminiStatus.classList.remove("is-off");
+    }
   } else {
     rerunBtn.title = "Gemini解析は無効化されています";
     rerunBtn.setAttribute("aria-disabled", "true");
+    if (geminiStatus) {
+      geminiStatus.textContent = "Gemini OFF";
+      geminiStatus.classList.add("is-off");
+    }
   }
 };
 
