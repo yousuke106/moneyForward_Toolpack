@@ -94,6 +94,21 @@
             Preview。
           </p>
         </div>
+
+        <div
+          class="save-inline"
+          role="group"
+          aria-label="APIキーと解析設定の保存"
+        >
+          <div class="note">
+            APIキーと解析パラメータは保存ボタンを押したときのみ反映されます。
+            トグルやカテゴリルールは変更と同時に保存されます。
+          </div>
+          <div class="save-block">
+            <button id="saveBtn" disabled>APIキーと解析設定を保存</button>
+            <div id="status" class="status" aria-live="polite"></div>
+          </div>
+        </div>
       </section>
 
       <section class="card grid">
@@ -156,14 +171,59 @@
         </div>
       </section>
 
-      <section class="card actions">
-        <p class="note">
-          設定は同期を試行し、容量超過やエラー時はローカル保存にフォールバックします。
-        </p>
-        <div class="action-row">
-          <button id="saveBtn" disabled>保存して反映</button>
-          <div id="status" class="status" aria-live="polite"></div>
+      <section class="card">
+        <h2>カテゴリルール</h2>
+        <div class="field">
+          <div class="row-inline between">
+            <div>
+              <div class="field-title">大項目×中項目の警告を有効にする</div>
+              <div class="note">
+                ホワイト/ブラックリストで許可・禁止する組み合わせを管理します。
+              </div>
+            </div>
+            <label class="switch">
+              <input
+                id="categoryRuleToggle"
+                type="checkbox"
+                aria-label="カテゴリルール警告の有効/無効"
+              >
+              <span class="slider" aria-hidden="true"></span>
+            </label>
+          </div>
         </div>
+
+        <div class="tabs">
+          <button id="categoryTabWhitelist" type="button" class="tab is-active">
+            Whitelist (許可のみ)
+          </button>
+          <button id="categoryTabBlacklist" type="button" class="tab">
+            Blacklist (禁止のみ)
+          </button>
+        </div>
+
+        <ul id="categoryList" class="category-list"></ul>
+
+        <div class="category-form">
+          <input
+            id="categoryLargeInput"
+            type="text"
+            placeholder="大項目 例: 食費"
+            autocomplete="off"
+          >
+          <input
+            id="categoryMiddleInput"
+            type="text"
+            placeholder="中項目 例: 外食"
+            autocomplete="off"
+          >
+          <button id="categoryAddBtn" type="button">追加</button>
+        </div>
+        <div
+          id="categoryError"
+          class="error"
+          role="alert"
+          aria-live="polite"
+        ></div>
       </section>
     </main>
 

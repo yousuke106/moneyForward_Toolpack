@@ -23,6 +23,8 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     );
   const HIGHLIGHT_CLASS = "mf-sub-highlight";
   const DUPLICATE_CLASS = "mf-sub-duplicate";
+  const CATEGORY_ALERT_ROW_CLASS = "mf-sub-category-alert-row";
+  const CATEGORY_ALERT_CELL_CLASS = "mf-sub-category-alert-cell";
   const SESSION_FLAG_PREFIX = "mf_subs_checked_";
   const DEFAULT_THRESHOLD = 70;
   const DEFAULT_MODEL = "gemini-2.5-flash";
@@ -50,6 +52,75 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const buildTxKey = (id) => `tx:${id}`;
   const buildStoreAmountKey = (store, amount) =>
     `sa:${normalizeStoreName(store)}|${amount}`;
+  const normalizeCategory = (text) => {
+    if (!text) {
+      return "";
+    }
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return "";
+    }
+    const collapsed = trimmed.replace(/\s+/gu, " ");
+    const nk = collapsed.normalize("NFKC");
+    const withoutSpaces = nk.replace(/\s+/gu, "");
+    return withoutSpaces;
+  };
+  const buildCategoryRuleKey = ({ category, subcategory }) => {
+    const large = normalizeCategory(category);
+    const middle = normalizeCategory(subcategory);
+    if (!(large && middle)) {
+      return "";
+    }
+    return `${large}|${middle}`;
+  };
+  const buildCategoryRuleSets = (categoryRules = {}) => {
+    const whitelist = new Set();
+    const blacklist = new Set();
+    const { whitelist: wl = [], blacklist: bl = [] } = categoryRules;
+    for (const item of wl) {
+      const key = buildCategoryRuleKey({
+        category: item?.large,
+        subcategory: item?.middle,
+      });
+      if (key) {
+        whitelist.add(key);
+      }
+    }
+    for (const item of bl) {
+      const key = buildCategoryRuleKey({
+        category: item?.large,
+        subcategory: item?.middle,
+      });
+      if (key) {
+        blacklist.add(key);
+      }
+    }
+    return { whitelist, blacklist };
+  };
+
+  const evaluateCategoryRule = ({ category, subcategory }, sets) => {
+    const key = buildCategoryRuleKey({ category, subcategory });
+    if (!key) {
+      return null;
+    }
+    const whitelistSize = sets?.whitelist?.size ?? 0;
+    const hasWhitelist = whitelistSize > 0;
+    const whitelistHit = sets?.whitelist?.has(key) ?? false;
+    const blacklistHit = sets?.blacklist?.has(key) ?? false;
+
+    if (hasWhitelist) {
+      if (whitelistHit) {
+        return null;
+      }
+      return { violation: "whitelist_miss", key };
+    }
+
+    if (blacklistHit) {
+      return { violation: "blacklist_hit", key };
+    }
+
+    return null;
+  };
   const buildDuplicateKey = ({ date, store, amount }) => {
     if (!(date && store) || amount === null || amount === undefined) {
       return "";
@@ -87,17 +158,43 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return "";
   };
 
-  const loadLabels = () =>
+  const safeStorageGet = (area, keys, fallback) =>
     new Promise((resolve) => {
-      if (!chrome?.storage?.local) {
-        resolve({ labelsByTxId: {}, labelsByStoreAmount: {} });
+      const store = chrome?.storage?.[area];
+      if (!(chrome?.runtime?.id && store)) {
+        resolve(fallback);
         return;
       }
-      chrome.storage.local.get(
-        { labelsByTxId: {}, labelsByStoreAmount: {} },
-        (data) => resolve(data)
-      );
+      try {
+        store.get(keys, (data) => resolve(data ?? fallback));
+      } catch (_error) {
+        resolve(fallback);
+      }
     });
+
+  const safeStorageSet = (area, payload) =>
+    new Promise((resolve) => {
+      const store = chrome?.storage?.[area];
+      if (!(chrome?.runtime?.id && store)) {
+        resolve();
+        return;
+      }
+      try {
+        store.set(payload, resolve);
+      } catch (_error) {
+        resolve();
+      }
+    });
+
+  const loadLabels = () =>
+    safeStorageGet(
+      "local",
+      { labelsByTxId: {}, labelsByStoreAmount: {} },
+      {
+        labelsByTxId: {},
+        labelsByStoreAmount: {},
+      }
+    );
 
   const saveLabel = async ({ txKey, storeAmountKey, label }) => {
     const { labelsByTxId, labelsByStoreAmount } = await loadLabels();
@@ -108,18 +205,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       delete labelsByTxId[txKey];
       delete labelsByStoreAmount[storeAmountKey];
     }
-    await new Promise((resolve) => {
-      if (!chrome?.storage?.local) {
-        resolve();
-        return;
-      }
-      chrome.storage.local.set(
-        {
-          labelsByTxId,
-          labelsByStoreAmount,
-        },
-        resolve
-      );
+    await safeStorageSet("local", {
+      labelsByTxId,
+      labelsByStoreAmount,
     });
   };
 
@@ -299,23 +387,14 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   observer.observe(listBody, { childList: true, subtree: true });
 
   // Gemini 解析
-  const loadSettings = () =>
-    new Promise((resolve) => {
-      if (!chrome?.storage) {
-        resolve({});
-        return;
-      }
-      chrome.storage.sync.get("settings", (res) => {
-        const syncSettings = res?.settings;
-        if (syncSettings) {
-          resolve(syncSettings);
-          return;
-        }
-        chrome.storage.local.get("settings", (localRes) => {
-          resolve(localRes?.settings ?? {});
-        });
-      });
-    });
+  const loadSettings = async () => {
+    const syncRes = await safeStorageGet("sync", "settings", {});
+    if (syncRes?.settings) {
+      return syncRes.settings;
+    }
+    const localRes = await safeStorageGet("local", "settings", {});
+    return localRes?.settings ?? {};
+  };
 
   const _getViewMonth = () => {
     const rows = document.querySelectorAll("tr.transaction_list");
@@ -555,6 +634,63 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  const clearCategoryAlert = (row) => {
+    row.classList.remove(CATEGORY_ALERT_ROW_CLASS);
+    const categoryCell = row.querySelector(".v_l_ctg");
+    const subcategoryCell = row.querySelector(".v_m_ctg");
+    for (const cell of [categoryCell, subcategoryCell]) {
+      cell?.classList.remove(CATEGORY_ALERT_CELL_CLASS);
+    }
+    if (row.title?.startsWith("カテゴリ組み合わせ")) {
+      row.removeAttribute("title");
+    }
+  };
+
+  const shouldCheckCategory = (row) =>
+    getIsTarget(row) && !getIsIncome(row) && isNegativeAmount(row);
+
+  const getCategoryTexts = (row) => {
+    const category = row.querySelector(".v_l_ctg")?.textContent?.trim() ?? "";
+    const subcategory =
+      row.querySelector(".v_m_ctg")?.textContent?.trim() ?? "";
+    return { category, subcategory };
+  };
+
+  const setCategoryAlert = (row, violation) => {
+    row.classList.add(CATEGORY_ALERT_ROW_CLASS);
+    const categoryCell = row.querySelector(".v_l_ctg");
+    const subcategoryCell = row.querySelector(".v_m_ctg");
+    categoryCell?.classList.add(CATEGORY_ALERT_CELL_CLASS);
+    subcategoryCell?.classList.add(CATEGORY_ALERT_CELL_CLASS);
+    const reasonText =
+      violation?.violation === "whitelist_miss"
+        ? "カテゴリ組み合わせがホワイトリストに登録されていません"
+        : "カテゴリ組み合わせがブラックリストに登録されています";
+    row.title = reasonText;
+  };
+
+  const applyCategoryAlert = (sets) => {
+    const rows = document.querySelectorAll("tr.transaction_list");
+    for (const row of rows) {
+      if (!shouldCheckCategory(row)) {
+        clearCategoryAlert(row);
+        continue;
+      }
+
+      const { category, subcategory } = getCategoryTexts(row);
+      const isUnclassified =
+        !(category && subcategory) || category === "未分類";
+      const violation = isUnclassified
+        ? null
+        : evaluateCategoryRule({ category, subcategory }, sets);
+      if (!violation) {
+        clearCategoryAlert(row);
+        continue;
+      }
+      setCategoryAlert(row, violation);
+    }
+  };
+
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: ハイライト処理を一括で実行するため許容
   const applyGeminiHighlight = (results, threshold) => {
     const rows = document.querySelectorAll("tr.transaction_list");
@@ -596,6 +732,30 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       return;
     }
     applyDuplicateHighlight(duplicateTxIds);
+  };
+
+  const runCategoryRuleAlert = async () => {
+    const settings = await loadSettings();
+    const enabled = settings.featureFlags?.categoryRuleAlertEnabled ?? true;
+    if (!enabled) {
+      const rows = document.querySelectorAll("tr.transaction_list");
+      for (const row of rows) {
+        clearCategoryAlert(row);
+      }
+      return;
+    }
+    const sets = buildCategoryRuleSets(settings.categoryRules ?? {});
+    if (
+      (sets.whitelist?.size ?? 0) === 0 &&
+      (sets.blacklist?.size ?? 0) === 0
+    ) {
+      const rows = document.querySelectorAll("tr.transaction_list");
+      for (const row of rows) {
+        clearCategoryAlert(row);
+      }
+      return;
+    }
+    applyCategoryAlert(sets);
   };
 
   const runGemini = async () => {
@@ -755,9 +915,23 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     };
   })();
 
+  const scheduleCategoryCheck = (() => {
+    let pending = null;
+    return () => {
+      if (pending) {
+        return;
+      }
+      pending = setTimeout(() => {
+        pending = null;
+        runCategoryRuleAlert();
+      }, 200);
+    };
+  })();
+
   scheduleInit();
   scheduleRunGemini();
   scheduleDuplicateCheck();
+  scheduleCategoryCheck();
 
   const geminiObserver = new MutationObserver(() => scheduleRunGemini());
   geminiObserver.observe(listBody, { childList: true, subtree: true });
@@ -767,18 +941,30 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   );
   duplicateObserver.observe(listBody, { childList: true, subtree: true });
 
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if ((area === "sync" || area === "local") && changes.settings) {
-      clearSessionFlags();
-      log("settings changed; session flag cleared (no auto-run)");
-      scheduleDuplicateCheck();
-    }
-  });
+  const categoryObserver = new MutationObserver(() => scheduleCategoryCheck());
+  categoryObserver.observe(listBody, { childList: true, subtree: true });
 
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message?.type === "mf_subs_rerun_gemini") {
-      clearSessionFlags();
-      runGemini();
-    }
-  });
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if ((area === "sync" || area === "local") && changes.settings) {
+        clearSessionFlags();
+        log("settings changed; session flag cleared (no auto-run)");
+        scheduleDuplicateCheck();
+        scheduleCategoryCheck();
+      }
+    });
+  } catch (_e) {
+    // コンテキスト無効化時は無視
+  }
+
+  try {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message?.type === "mf_subs_rerun_gemini") {
+        clearSessionFlags();
+        runGemini();
+      }
+    });
+  } catch (_e) {
+    // コンテキスト無効化時は無視
+  }
 })();

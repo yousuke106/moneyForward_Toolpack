@@ -1,3 +1,8 @@
+import {
+  buildRuleKey,
+  MAX_CATEGORY_RULES,
+  normalizeCategory,
+} from "../data/category-rules.js";
 import { loadSettings, saveSettingsWithFallback } from "../data/storage.js";
 
 const apiKeyInput = document.getElementById("apiKey");
@@ -14,6 +19,14 @@ const thresholdErrorEl = document.getElementById("thresholdError");
 const geminiToggle = document.getElementById("geminiToggle");
 const duplicateToggle = document.getElementById("duplicateToggle");
 const downloaderToggle = document.getElementById("downloaderToggle");
+const categoryToggle = document.getElementById("categoryRuleToggle");
+const categoryTabWhitelist = document.getElementById("categoryTabWhitelist");
+const categoryTabBlacklist = document.getElementById("categoryTabBlacklist");
+const categoryList = document.getElementById("categoryList");
+const categoryLargeInput = document.getElementById("categoryLargeInput");
+const categoryMiddleInput = document.getElementById("categoryMiddleInput");
+const categoryAddBtn = document.getElementById("categoryAddBtn");
+const categoryError = document.getElementById("categoryError");
 
 const CUSTOM_MODEL_VALUE = "__custom__";
 const DEFAULT_THRESHOLD = 70;
@@ -39,6 +52,9 @@ const MODEL_OPTIONS = [
   { value: "gemini-1.5-pro-latest", label: "Gemini 1.5 Pro（互換用）" },
   { value: "gemini-1.5-flash-latest", label: "Gemini 1.5 Flash（互換用）" },
 ];
+
+let categoryRules = { whitelist: [], blacklist: [] };
+let currentCategoryTab = "whitelist";
 
 const renderStatus = (message, isError = false) => {
   statusEl.textContent = message;
@@ -101,6 +117,7 @@ const validate = () => {
   const geminiEnabled = geminiToggle?.checked ?? true;
   const duplicateEnabled = duplicateToggle?.checked ?? true;
   const downloaderEnabled = downloaderToggle?.checked ?? true;
+  const categoryEnabled = categoryToggle?.checked ?? true;
   return {
     valid,
     apiKey,
@@ -109,6 +126,7 @@ const validate = () => {
     geminiEnabled,
     duplicateEnabled,
     downloaderEnabled,
+    categoryEnabled,
   };
 };
 
@@ -127,12 +145,43 @@ const resolveModelValue = (loadedModel) => {
   return modelValue || loadedModel || DEFAULT_MODEL;
 };
 
-const buildSettingsSnapshot = (
+const applyFeatureToggles = (settings) => {
+  const geminiEnabled = settings.featureFlags?.geminiAnalysisEnabled ?? true;
+  const duplicateEnabled = settings.featureFlags?.duplicateCheckEnabled ?? true;
+  const downloaderEnabled =
+    settings.featureFlags?.downloaderContextMenuEnabled ?? true;
+  const categoryEnabled =
+    settings.featureFlags?.categoryRuleAlertEnabled ?? true;
+
+  if (geminiToggle) {
+    geminiToggle.checked = geminiEnabled;
+  }
+  if (duplicateToggle) {
+    duplicateToggle.checked = duplicateEnabled;
+  }
+  if (downloaderToggle) {
+    downloaderToggle.checked = downloaderEnabled;
+  }
+  if (categoryToggle) {
+    categoryToggle.checked = categoryEnabled;
+  }
+};
+
+const applyCategoryRules = (settings) => {
+  categoryRules = {
+    whitelist: settings.categoryRules?.whitelist ?? [],
+    blacklist: settings.categoryRules?.blacklist ?? [],
+  };
+  renderCategoryTab(currentCategoryTab);
+};
+
+const buildSettingsSnapshot = ({
   geminiEnabled,
   duplicateEnabled,
   downloaderEnabled,
-  loadedSettings = {}
-) => {
+  categoryEnabled,
+  loadedSettings = {},
+}) => {
   const apiKeyFallback = loadedSettings.geminiApiKey ?? "";
   const thresholdFallback =
     typeof loadedSettings.scoreThreshold === "number"
@@ -147,6 +196,11 @@ const buildSettingsSnapshot = (
 
   const resolvedModel = resolveModelValue(loadedSettings.model);
 
+  const resolvedCategoryRules = {
+    whitelist: categoryRules.whitelist ?? [],
+    blacklist: categoryRules.blacklist ?? [],
+  };
+
   return {
     geminiApiKey: apiKeyInput.value.trim() || apiKeyFallback,
     scoreThreshold: threshold,
@@ -155,8 +209,133 @@ const buildSettingsSnapshot = (
       geminiAnalysisEnabled: geminiEnabled,
       duplicateCheckEnabled: duplicateEnabled,
       downloaderContextMenuEnabled: downloaderEnabled,
+      categoryRuleAlertEnabled: categoryEnabled,
+    },
+    categoryRules: resolvedCategoryRules,
+  };
+};
+
+const setCategoryError = (message) => {
+  if (!categoryError) {
+    return;
+  }
+  categoryError.textContent = message;
+  categoryError.style.display = message ? "block" : "none";
+};
+
+const renderCategoryTab = (tab) => {
+  currentCategoryTab = tab;
+  const isWhitelist = tab === "whitelist";
+  categoryTabWhitelist?.classList.toggle("is-active", isWhitelist);
+  categoryTabBlacklist?.classList.toggle("is-active", !isWhitelist);
+  renderCategoryList();
+};
+
+const renderCategoryList = () => {
+  if (!categoryList) {
+    return;
+  }
+  categoryList.innerHTML = "";
+  const list = categoryRules[currentCategoryTab] ?? [];
+  if (!list.length) {
+    const empty = document.createElement("li");
+    empty.className = "category-list__empty";
+    empty.textContent = "ルールはまだありません";
+    categoryList.append(empty);
+    return;
+  }
+  list.forEach((item, index) => {
+    const li = document.createElement("li");
+    li.className = "category-list__item";
+    const label = document.createElement("span");
+    label.textContent = `${item.large} - ${item.middle}`;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ghost danger";
+    btn.textContent = "削除";
+    btn.addEventListener("click", async () => {
+      categoryRules[currentCategoryTab].splice(index, 1);
+      renderCategoryList();
+      try {
+        await persistCategoryRules();
+      } catch (error) {
+        renderStatus(`ルール保存に失敗しました: ${error.message}`, true);
+      }
+    });
+    li.append(label, btn);
+    categoryList.append(li);
+  });
+};
+
+const persistCategoryRules = async () => {
+  const loaded = await loadSettings();
+  const baseSettings = loaded?.settings ?? {
+    geminiApiKey: apiKeyInput.value.trim(),
+    scoreThreshold: Number.isFinite(Number(thresholdInput.value))
+      ? Number(thresholdInput.value)
+      : DEFAULT_THRESHOLD,
+    model: resolveModelValue(),
+    featureFlags: {
+      geminiAnalysisEnabled: geminiToggle?.checked ?? true,
+      duplicateCheckEnabled: duplicateToggle?.checked ?? true,
+      downloaderContextMenuEnabled: downloaderToggle?.checked ?? true,
+      categoryRuleAlertEnabled: categoryToggle?.checked ?? true,
     },
   };
+  const snapshot = {
+    ...baseSettings,
+    categoryRules: {
+      whitelist: categoryRules.whitelist ?? [],
+      blacklist: categoryRules.blacklist ?? [],
+    },
+  };
+  const result = await saveSettingsWithFallback(snapshot);
+  const areaLabel = result.area === "sync" ? "sync" : "local";
+  let reason = "";
+  if (result.reason === "sync_threshold") {
+    reason = "（sync容量超過のためローカル保存）";
+  } else if (result.reason === "sync_error") {
+    reason = "（sync書き込みエラーのためローカル保存）";
+  }
+  renderStatus(`ルールを保存しました: ${areaLabel}${reason}`);
+};
+
+const addCategoryRule = async () => {
+  setCategoryError("");
+  const largeRaw = categoryLargeInput?.value ?? "";
+  const middleRaw = categoryMiddleInput?.value ?? "";
+  const largeDisplay = largeRaw.trim();
+  const middleDisplay = middleRaw.trim();
+  const large = normalizeCategory(largeDisplay);
+  const middle = normalizeCategory(middleDisplay);
+  if (!(large && middle)) {
+    setCategoryError("大項目と中項目を入力してください。");
+    return;
+  }
+  const key = buildRuleKey({ large, middle });
+  const list = categoryRules[currentCategoryTab] ?? [];
+  const isDuplicate = list.some((item) => buildRuleKey(item) === key);
+  if (isDuplicate) {
+    setCategoryError("既に登録されています。");
+    return;
+  }
+  const totalCount =
+    (categoryRules.whitelist?.length ?? 0) +
+    (categoryRules.blacklist?.length ?? 0);
+  if (totalCount >= MAX_CATEGORY_RULES) {
+    setCategoryError(`登録できるルールは最大 ${MAX_CATEGORY_RULES} 件です。`);
+    return;
+  }
+  list.push({ large: largeDisplay, middle: middleDisplay });
+  categoryRules[currentCategoryTab] = list;
+  categoryLargeInput.value = "";
+  categoryMiddleInput.value = "";
+  renderCategoryList();
+  try {
+    await persistCategoryRules();
+  } catch (error) {
+    renderStatus(`ルール保存に失敗しました: ${error.message}`, true);
+  }
 };
 
 const applySettingsToUi = (settings, area) => {
@@ -179,19 +358,8 @@ const applySettingsToUi = (settings, area) => {
       customModelInput.value = settings.model;
     }
   }
-  const geminiEnabled = settings.featureFlags?.geminiAnalysisEnabled ?? true;
-  const duplicateEnabled = settings.featureFlags?.duplicateCheckEnabled ?? true;
-  const downloaderEnabled =
-    settings.featureFlags?.downloaderContextMenuEnabled ?? true;
-  if (geminiToggle) {
-    geminiToggle.checked = geminiEnabled;
-  }
-  if (duplicateToggle) {
-    duplicateToggle.checked = duplicateEnabled;
-  }
-  if (downloaderToggle) {
-    downloaderToggle.checked = downloaderEnabled;
-  }
+  applyFeatureToggles(settings);
+  applyCategoryRules(settings);
   renderStatus(`ロード元: ${area === "sync" ? "sync" : "local"}`);
 };
 
@@ -208,6 +376,10 @@ const load = async () => {
     if (downloaderToggle) {
       downloaderToggle.checked = true;
     }
+    if (categoryToggle) {
+      categoryToggle.checked = true;
+    }
+    renderCategoryTab(currentCategoryTab);
     renderStatus("未保存です。設定を入力してください。");
     validate();
     return;
@@ -225,6 +397,7 @@ const onSave = async () => {
     geminiEnabled,
     duplicateEnabled,
     downloaderEnabled,
+    categoryEnabled,
   } = validate();
   if (!valid) {
     return;
@@ -238,7 +411,9 @@ const onSave = async () => {
       geminiAnalysisEnabled: geminiEnabled,
       duplicateCheckEnabled: duplicateEnabled,
       downloaderContextMenuEnabled: downloaderEnabled,
+      categoryRuleAlertEnabled: categoryEnabled,
     },
+    categoryRules,
   };
   const result = await saveSettingsWithFallback(settings);
   const areaLabel = result.area === "sync" ? "sync" : "local";
@@ -262,14 +437,35 @@ for (const el of [apiKeyInput, thresholdInput, modelSelect, customModelInput]) {
   el.addEventListener("change", validate);
 }
 
+categoryTabWhitelist?.addEventListener("click", () => {
+  renderCategoryTab("whitelist");
+});
+
+categoryTabBlacklist?.addEventListener("click", () => {
+  renderCategoryTab("blacklist");
+});
+
+categoryAddBtn?.addEventListener("click", () => {
+  addCategoryRule();
+});
+
+categoryLargeInput?.addEventListener("input", () => setCategoryError(""));
+categoryMiddleInput?.addEventListener("input", () => setCategoryError(""));
+
 if (geminiToggle) {
   geminiToggle.addEventListener("change", () => {
     validate();
     const geminiEnabled = geminiToggle.checked;
     const duplicateEnabled = duplicateToggle?.checked ?? true;
     const downloaderEnabled = downloaderToggle?.checked ?? true;
-    saveFeatureToggle(geminiEnabled, duplicateEnabled, downloaderEnabled).catch(
-      (error) => renderStatus(`保存に失敗しました: ${error.message}`, true)
+    const categoryEnabled = categoryToggle?.checked ?? true;
+    saveFeatureToggle(
+      geminiEnabled,
+      duplicateEnabled,
+      downloaderEnabled,
+      categoryEnabled
+    ).catch((error) =>
+      renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
   });
 }
@@ -280,8 +476,14 @@ if (duplicateToggle) {
     const geminiEnabled = geminiToggle?.checked ?? true;
     const duplicateEnabled = duplicateToggle.checked;
     const downloaderEnabled = downloaderToggle?.checked ?? true;
-    saveFeatureToggle(geminiEnabled, duplicateEnabled, downloaderEnabled).catch(
-      (error) => renderStatus(`保存に失敗しました: ${error.message}`, true)
+    const categoryEnabled = categoryToggle?.checked ?? true;
+    saveFeatureToggle(
+      geminiEnabled,
+      duplicateEnabled,
+      downloaderEnabled,
+      categoryEnabled
+    ).catch((error) =>
+      renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
   });
 }
@@ -292,8 +494,32 @@ if (downloaderToggle) {
     const geminiEnabled = geminiToggle?.checked ?? true;
     const duplicateEnabled = duplicateToggle?.checked ?? true;
     const downloaderEnabled = downloaderToggle.checked;
-    saveFeatureToggle(geminiEnabled, duplicateEnabled, downloaderEnabled).catch(
-      (error) => renderStatus(`保存に失敗しました: ${error.message}`, true)
+    const categoryEnabled = categoryToggle?.checked ?? true;
+    saveFeatureToggle(
+      geminiEnabled,
+      duplicateEnabled,
+      downloaderEnabled,
+      categoryEnabled
+    ).catch((error) =>
+      renderStatus(`保存に失敗しました: ${error.message}`, true)
+    );
+  });
+}
+
+if (categoryToggle) {
+  categoryToggle.addEventListener("change", () => {
+    validate();
+    const geminiEnabled = geminiToggle?.checked ?? true;
+    const duplicateEnabled = duplicateToggle?.checked ?? true;
+    const downloaderEnabled = downloaderToggle?.checked ?? true;
+    const categoryEnabled = categoryToggle.checked;
+    saveFeatureToggle(
+      geminiEnabled,
+      duplicateEnabled,
+      downloaderEnabled,
+      categoryEnabled
+    ).catch((error) =>
+      renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
   });
 }
@@ -301,15 +527,17 @@ if (downloaderToggle) {
 const saveFeatureToggle = async (
   geminiEnabled,
   duplicateEnabled,
-  downloaderEnabled
+  downloaderEnabled,
+  categoryEnabled
 ) => {
   const loaded = await loadSettings();
-  const snapshot = buildSettingsSnapshot(
+  const snapshot = buildSettingsSnapshot({
     geminiEnabled,
     duplicateEnabled,
     downloaderEnabled,
-    loaded?.settings ?? {}
-  );
+    categoryEnabled,
+    loadedSettings: loaded?.settings ?? {},
+  });
   const result = await saveSettingsWithFallback(snapshot);
   const areaLabel = result.area === "sync" ? "sync" : "local";
   let reason = "";
