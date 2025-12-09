@@ -29,3 +29,6 @@ dist.zip
 
 # temp files
 tmp/
+
+# local tooling
+.serena/
