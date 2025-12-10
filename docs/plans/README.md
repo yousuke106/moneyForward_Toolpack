@@ -6,3 +6,4 @@
 - `duplicate_check_design.md` : 二重計上チェック機能の詳細設計と実装タスク一覧。
 - `mf_downloader_context_menu_design.md` : 家計簿CSVを右クリックメニューからダウンロードする機能の移植設計メモとタスク草案。
 - `budget_category_rules_design.md` : 大項目×中項目の組み合わせ警告表示の詳細設計と実装タスク。
+- `satisfaction_columns_design.md` : 家計簿テーブルに満足度/メモ列を追加するための設計メモ（Top/Worst3 選択と理由メモ、保存スキーマ、タスク草案）。
