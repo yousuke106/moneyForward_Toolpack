@@ -9,6 +9,7 @@ const DEFAULT_FEATURE_FLAGS = {
   duplicateCheckEnabled: true,
   downloaderContextMenuEnabled: true,
   categoryRuleAlertEnabled: true,
+  satisfactionEnabled: true,
 };
 
 const DEFAULT_CATEGORY_RULES = {

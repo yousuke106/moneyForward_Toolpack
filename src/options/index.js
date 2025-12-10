@@ -20,6 +20,7 @@ const geminiToggle = document.getElementById("geminiToggle");
 const duplicateToggle = document.getElementById("duplicateToggle");
 const downloaderToggle = document.getElementById("downloaderToggle");
 const categoryToggle = document.getElementById("categoryRuleToggle");
+const satisfactionToggle = document.getElementById("satisfactionToggle");
 const categoryTabWhitelist = document.getElementById("categoryTabWhitelist");
 const categoryTabBlacklist = document.getElementById("categoryTabBlacklist");
 const categoryList = document.getElementById("categoryList");
@@ -118,6 +119,7 @@ const validate = () => {
   const duplicateEnabled = duplicateToggle?.checked ?? true;
   const downloaderEnabled = downloaderToggle?.checked ?? true;
   const categoryEnabled = categoryToggle?.checked ?? true;
+  const satisfactionEnabled = satisfactionToggle?.checked ?? true;
   return {
     valid,
     apiKey,
@@ -127,6 +129,7 @@ const validate = () => {
     duplicateEnabled,
     downloaderEnabled,
     categoryEnabled,
+    satisfactionEnabled,
   };
 };
 
@@ -152,6 +155,8 @@ const applyFeatureToggles = (settings) => {
     settings.featureFlags?.downloaderContextMenuEnabled ?? true;
   const categoryEnabled =
     settings.featureFlags?.categoryRuleAlertEnabled ?? true;
+  const satisfactionEnabled =
+    settings.featureFlags?.satisfactionEnabled ?? true;
 
   if (geminiToggle) {
     geminiToggle.checked = geminiEnabled;
@@ -164,6 +169,9 @@ const applyFeatureToggles = (settings) => {
   }
   if (categoryToggle) {
     categoryToggle.checked = categoryEnabled;
+  }
+  if (satisfactionToggle) {
+    satisfactionToggle.checked = satisfactionEnabled;
   }
 };
 
@@ -180,6 +188,7 @@ const buildSettingsSnapshot = ({
   duplicateEnabled,
   downloaderEnabled,
   categoryEnabled,
+  satisfactionEnabled,
   loadedSettings = {},
 }) => {
   const apiKeyFallback = loadedSettings.geminiApiKey ?? "";
@@ -210,6 +219,7 @@ const buildSettingsSnapshot = ({
       duplicateCheckEnabled: duplicateEnabled,
       downloaderContextMenuEnabled: downloaderEnabled,
       categoryRuleAlertEnabled: categoryEnabled,
+      satisfactionEnabled,
     },
     categoryRules: resolvedCategoryRules,
   };
@@ -280,6 +290,7 @@ const persistCategoryRules = async () => {
       duplicateCheckEnabled: duplicateToggle?.checked ?? true,
       downloaderContextMenuEnabled: downloaderToggle?.checked ?? true,
       categoryRuleAlertEnabled: categoryToggle?.checked ?? true,
+      satisfactionEnabled: satisfactionToggle?.checked ?? true,
     },
   };
   const snapshot = {
@@ -379,6 +390,9 @@ const load = async () => {
     if (categoryToggle) {
       categoryToggle.checked = true;
     }
+    if (satisfactionToggle) {
+      satisfactionToggle.checked = true;
+    }
     renderCategoryTab(currentCategoryTab);
     renderStatus("未保存です。設定を入力してください。");
     validate();
@@ -398,6 +412,7 @@ const onSave = async () => {
     duplicateEnabled,
     downloaderEnabled,
     categoryEnabled,
+    satisfactionEnabled,
   } = validate();
   if (!valid) {
     return;
@@ -412,6 +427,7 @@ const onSave = async () => {
       duplicateCheckEnabled: duplicateEnabled,
       downloaderContextMenuEnabled: downloaderEnabled,
       categoryRuleAlertEnabled: categoryEnabled,
+      satisfactionEnabled,
     },
     categoryRules,
   };
@@ -455,16 +471,13 @@ categoryMiddleInput?.addEventListener("input", () => setCategoryError(""));
 if (geminiToggle) {
   geminiToggle.addEventListener("change", () => {
     validate();
-    const geminiEnabled = geminiToggle.checked;
-    const duplicateEnabled = duplicateToggle?.checked ?? true;
-    const downloaderEnabled = downloaderToggle?.checked ?? true;
-    const categoryEnabled = categoryToggle?.checked ?? true;
-    saveFeatureToggle(
-      geminiEnabled,
-      duplicateEnabled,
-      downloaderEnabled,
-      categoryEnabled
-    ).catch((error) =>
+    saveFeatureToggle({
+      geminiEnabled: geminiToggle.checked,
+      duplicateEnabled: duplicateToggle?.checked ?? true,
+      downloaderEnabled: downloaderToggle?.checked ?? true,
+      categoryEnabled: categoryToggle?.checked ?? true,
+      satisfactionEnabled: satisfactionToggle?.checked ?? true,
+    }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
   });
@@ -473,16 +486,13 @@ if (geminiToggle) {
 if (duplicateToggle) {
   duplicateToggle.addEventListener("change", () => {
     validate();
-    const geminiEnabled = geminiToggle?.checked ?? true;
-    const duplicateEnabled = duplicateToggle.checked;
-    const downloaderEnabled = downloaderToggle?.checked ?? true;
-    const categoryEnabled = categoryToggle?.checked ?? true;
-    saveFeatureToggle(
-      geminiEnabled,
-      duplicateEnabled,
-      downloaderEnabled,
-      categoryEnabled
-    ).catch((error) =>
+    saveFeatureToggle({
+      geminiEnabled: geminiToggle?.checked ?? true,
+      duplicateEnabled: duplicateToggle.checked,
+      downloaderEnabled: downloaderToggle?.checked ?? true,
+      categoryEnabled: categoryToggle?.checked ?? true,
+      satisfactionEnabled: satisfactionToggle?.checked ?? true,
+    }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
   });
@@ -491,16 +501,13 @@ if (duplicateToggle) {
 if (downloaderToggle) {
   downloaderToggle.addEventListener("change", () => {
     validate();
-    const geminiEnabled = geminiToggle?.checked ?? true;
-    const duplicateEnabled = duplicateToggle?.checked ?? true;
-    const downloaderEnabled = downloaderToggle.checked;
-    const categoryEnabled = categoryToggle?.checked ?? true;
-    saveFeatureToggle(
-      geminiEnabled,
-      duplicateEnabled,
-      downloaderEnabled,
-      categoryEnabled
-    ).catch((error) =>
+    saveFeatureToggle({
+      geminiEnabled: geminiToggle?.checked ?? true,
+      duplicateEnabled: duplicateToggle?.checked ?? true,
+      downloaderEnabled: downloaderToggle.checked,
+      categoryEnabled: categoryToggle?.checked ?? true,
+      satisfactionEnabled: satisfactionToggle?.checked ?? true,
+    }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
   });
@@ -509,33 +516,47 @@ if (downloaderToggle) {
 if (categoryToggle) {
   categoryToggle.addEventListener("change", () => {
     validate();
-    const geminiEnabled = geminiToggle?.checked ?? true;
-    const duplicateEnabled = duplicateToggle?.checked ?? true;
-    const downloaderEnabled = downloaderToggle?.checked ?? true;
-    const categoryEnabled = categoryToggle.checked;
-    saveFeatureToggle(
-      geminiEnabled,
-      duplicateEnabled,
-      downloaderEnabled,
-      categoryEnabled
-    ).catch((error) =>
+    saveFeatureToggle({
+      geminiEnabled: geminiToggle?.checked ?? true,
+      duplicateEnabled: duplicateToggle?.checked ?? true,
+      downloaderEnabled: downloaderToggle?.checked ?? true,
+      categoryEnabled: categoryToggle.checked,
+      satisfactionEnabled: satisfactionToggle?.checked ?? true,
+    }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
   });
 }
 
-const saveFeatureToggle = async (
+if (satisfactionToggle) {
+  satisfactionToggle.addEventListener("change", () => {
+    validate();
+    saveFeatureToggle({
+      geminiEnabled: geminiToggle?.checked ?? true,
+      duplicateEnabled: duplicateToggle?.checked ?? true,
+      downloaderEnabled: downloaderToggle?.checked ?? true,
+      categoryEnabled: categoryToggle?.checked ?? true,
+      satisfactionEnabled: satisfactionToggle.checked,
+    }).catch((error) =>
+      renderStatus(`保存に失敗しました: ${error.message}`, true)
+    );
+  });
+}
+
+const saveFeatureToggle = async ({
   geminiEnabled,
   duplicateEnabled,
   downloaderEnabled,
-  categoryEnabled
-) => {
+  categoryEnabled,
+  satisfactionEnabled,
+}) => {
   const loaded = await loadSettings();
   const snapshot = buildSettingsSnapshot({
     geminiEnabled,
     duplicateEnabled,
     downloaderEnabled,
     categoryEnabled,
+    satisfactionEnabled,
     loadedSettings: loaded?.settings ?? {},
   });
   const result = await saveSettingsWithFallback(snapshot);

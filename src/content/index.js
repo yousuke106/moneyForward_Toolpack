@@ -12,6 +12,16 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     { value: "cancel", text: "解約予定" },
   ];
 
+  const SATISFACTION_OPTIONS = [
+    { value: "", text: "未選択" },
+    { value: "top1", text: "Top1" },
+    { value: "top2", text: "Top2" },
+    { value: "top3", text: "Top3" },
+    { value: "worst1", text: "Worst1" },
+    { value: "worst2", text: "Worst2" },
+    { value: "worst3", text: "Worst3" },
+  ];
+
   const selectClass = "mf-sub-select";
   const injectedFlag = "mfSubInjected";
   const memoSelectorPrimary = "td.memo.form-switch-td";
@@ -211,6 +221,28 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     });
   };
 
+  const loadSatisfaction = () =>
+    safeStorageGet(
+      "local",
+      { satisfactionByTxId: {} },
+      { satisfactionByTxId: {} }
+    );
+
+  const saveSatisfaction = async ({ txKey, rank, note }) => {
+    const { satisfactionByTxId } = await loadSatisfaction();
+    const trimmedNote = note?.trim?.() ?? "";
+    const hasValue = Boolean(rank) || Boolean(trimmedNote);
+    if (hasValue) {
+      satisfactionByTxId[txKey] = {
+        rank: rank || null,
+        note: trimmedNote,
+      };
+    } else {
+      delete satisfactionByTxId[txKey];
+    }
+    await safeStorageSet("local", { satisfactionByTxId });
+  };
+
   const findTxId = (row) =>
     row.querySelector('input[name="user_asset_act[id]"]')?.value ?? "";
 
@@ -309,6 +341,90 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     memoCell.dataset[injectedFlag] = "1";
   };
 
+  const ensureSatisfactionHeader = () => {
+    const headRow = document.querySelector("#cf-detail-table thead tr");
+    if (!headRow || headRow.dataset.mfSatHead === "1") {
+      return;
+    }
+    const thRank = document.createElement("th");
+    thRank.textContent = "満足度";
+    const thNote = document.createElement("th");
+    thNote.textContent = "満足度メモ";
+    headRow.append(thRank, thNote);
+    headRow.dataset.mfSatHead = "1";
+  };
+
+  const removeSatisfactionUi = () => {
+    const headRow = document.querySelector("#cf-detail-table thead tr");
+    if (headRow && headRow.dataset.mfSatHead === "1") {
+      headRow.dataset.mfSatHead = "";
+      headRow.querySelector("th:last-child")?.remove();
+      headRow.querySelector("th:last-child")?.remove();
+    }
+    const rows = document.querySelectorAll("tr.transaction_list");
+    for (const row of rows) {
+      if (row.dataset.mfSatInjected === "1") {
+        row.dataset.mfSatInjected = "";
+        row.querySelector("td:last-child")?.remove();
+        row.querySelector("td:last-child")?.remove();
+      }
+    }
+  };
+
+  const injectSatisfactionCells = (row, satisfactionMap, onChange) => {
+    if (row.dataset.mfSatInjected === "1") {
+      return;
+    }
+    const txId = findTxId(row);
+    if (!txId) {
+      return;
+    }
+    const txKey = buildTxKey(txId);
+    const saved = satisfactionMap?.[txKey] ?? {};
+
+    const stop = (event) => {
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+    };
+
+    const tdRank = document.createElement("td");
+    const select = document.createElement("select");
+    select.className = "mf-sat-select";
+    select.setAttribute("aria-label", "満足度");
+    for (const opt of SATISFACTION_OPTIONS) {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.textContent = opt.text;
+      select.append(option);
+    }
+    select.value = saved.rank ?? "";
+    select.addEventListener("change", () => onChange(txKey, select, null));
+    select.addEventListener("click", stop);
+    select.addEventListener("mousedown", stop);
+    select.addEventListener("mouseup", stop);
+    select.addEventListener("touchstart", stop);
+    tdRank.append(select);
+
+    const tdNote = document.createElement("td");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "mf-sat-note";
+    input.maxLength = 120;
+    input.setAttribute("aria-label", "満足度メモ");
+    input.value = saved.note ?? "";
+    const handleInput = () => onChange(txKey, select, input);
+    input.addEventListener("change", handleInput);
+    input.addEventListener("blur", handleInput);
+    input.addEventListener("click", stop);
+    input.addEventListener("mousedown", stop);
+    input.addEventListener("mouseup", stop);
+    input.addEventListener("touchstart", stop);
+    tdNote.append(input);
+
+    row.append(tdRank, tdNote);
+    row.dataset.mfSatInjected = "1";
+  };
+
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 初期化処理を一括で行うため許容
   const init = async () => {
     const rows = document.querySelectorAll("tr.transaction_list");
@@ -356,6 +472,26 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     if (isDev && missingMemo > 0) {
       // eslint-disable-next-line no-console
       console.warn(`[mf-sub] memo cell not found in ${missingMemo} row(s)`);
+    }
+  };
+
+  const runSatisfaction = async () => {
+    const settings = await loadSettings();
+    const enabled = settings?.featureFlags?.satisfactionEnabled ?? true;
+    if (!enabled) {
+      removeSatisfactionUi();
+      return;
+    }
+    ensureSatisfactionHeader();
+    const { satisfactionByTxId } = await loadSatisfaction();
+    const rows = document.querySelectorAll("tr.transaction_list");
+    const handleChange = async (txKey, selectEl, inputEl) => {
+      const rank = selectEl?.value ?? "";
+      const note = inputEl?.value ?? "";
+      await saveSatisfaction({ txKey, rank, note });
+    };
+    for (const row of rows) {
+      injectSatisfactionCells(row, satisfactionByTxId, handleChange);
     }
   };
 
@@ -928,7 +1064,21 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     };
   })();
 
+  const scheduleSatisfaction = (() => {
+    let pending = null;
+    return () => {
+      if (pending) {
+        return;
+      }
+      pending = setTimeout(() => {
+        pending = null;
+        runSatisfaction();
+      }, 200);
+    };
+  })();
+
   scheduleInit();
+  scheduleSatisfaction();
   scheduleRunGemini();
   scheduleDuplicateCheck();
   scheduleCategoryCheck();
@@ -943,6 +1093,11 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
 
   const categoryObserver = new MutationObserver(() => scheduleCategoryCheck());
   categoryObserver.observe(listBody, { childList: true, subtree: true });
+
+  const satisfactionObserver = new MutationObserver(() =>
+    scheduleSatisfaction()
+  );
+  satisfactionObserver.observe(listBody, { childList: true, subtree: true });
 
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
