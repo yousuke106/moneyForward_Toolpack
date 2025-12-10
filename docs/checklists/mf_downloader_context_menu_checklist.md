@@ -1,7 +1,7 @@
 # 家計簿ダウンロード（右クリックメニュー）移植チェックリスト
 
 ## 事前準備
-- [x] manifest に `downloads`/`contextMenus`/`scripting`/`tabs` と `https://moneyforward.com/cf/csv*` などの host_permissions が含まれている。
+- [x] manifest に `downloads`/`contextMenus`/`scripting` と `https://moneyforward.com/cf/csv*` などの host_permissions が含まれている（`activeTab` はユーザー操作時のタブ特定用で `tabs` は不要）。
 - [x] 拡張をアンパックで読み込み、`chrome://extensions` で「更新」を実行。
 - [x] 家計簿ページ `https://moneyforward.com/cf` を表示し、ページヘッダーが読み込まれている。
 

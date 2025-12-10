@@ -19,7 +19,7 @@
 - **副作用**: 月抽出成功時に `mf_month_year` を保存するため、ポップアップ側の月入力初期値にも流用可能。
 
 ## 依存・要求権限
-- 追加が必要な権限: `contextMenus`, `downloads`, `scripting`, `tabs`。既存 `storage` は流用。
+- 追加が必要な権限: `contextMenus`, `downloads`, `scripting`。既存 `storage` と `activeTab`（ユーザー操作時のタブ特定用）を利用し、`tabs` は不要。
 - `host_permissions`: 少なくとも `https://moneyforward.com/cf*`, `https://moneyforward.com/cf/csv*`, `https://moneyforward.com/sign_in*` が必要。
 - バッジ表示には `action` API を使用（既存 manifest の `action` と共存可能）。
 
@@ -39,7 +39,7 @@
 - トグルで無効化した際にメニュー非表示を行う場合、ストレージ変化を受けて動的に `contextMenus` を再構築する必要がある。非表示漏れや競合に注意。
 
 ## 移植タスク（ドラフト・漏れチェック反映）
-- [x] manifest に `contextMenus`, `downloads`, `scripting`, `tabs` と `cf/csv` 系 host permissions を追加。permissions 追加理由を README/ストア説明に追記。
+- [x] manifest に `contextMenus`, `downloads`, `scripting` と `cf/csv` 系 host permissions を追加（`activeTab` はユーザー操作時のタブ特定用、`tabs` は不要）。permissions 追加理由を README/ストア説明に追記。
 - [x] 背景スクリプトにコンテキストメニュー作成・クリックハンドラ・バッジ処理・CSV取得ロジックを組み込み（ESM対応）。
 - [x] `mf_month_year` 保存/復元が既存 UI と競合しないことを確認し、ポップアップ初期化で共用するか明示。
 - [x] DOM 抽出セレクタ・正規表現をユニット化し、将来差し替えやすくする（単体テスト可能な純粋関数化を含む）。

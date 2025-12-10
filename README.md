@@ -59,7 +59,7 @@ npm test
 ### 動作環境
 - Node.js (テスト実行用)
 - Google Chrome (最新版)
-- Chrome 拡張権限: `downloads`, `scripting`, `tabs`, `contextMenus`, `storage`（家計簿ページでのダウンロード機能・設定保存のため）
+- Chrome 拡張権限: `downloads`, `scripting`, `contextMenus`, `storage`, `unlimitedStorage`, `activeTab`（家計簿ページでのダウンロード機能・設定保存のため。`activeTab` はユーザー操作時のみ現在タブへのアクセスを許可）
 
 ## 📄 ライセンス
 
