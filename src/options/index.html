@@ -231,6 +231,22 @@
           </div>
         </div>
 
+        <div class="field row-inline gap">
+          <button id="categoryExportBtn" type="button">
+            ルールをエクスポート (CSV)
+          </button>
+          <button id="categoryImportBtn" type="button">
+            ルールをインポート (CSV)
+          </button>
+          <input
+            id="categoryImportInput"
+            type="file"
+            accept=".csv,text/csv"
+            class="hidden"
+            aria-label="カテゴリルールCSVを選択"
+          >
+        </div>
+
         <div class="tabs">
           <button id="categoryTabWhitelist" type="button" class="tab is-active">
             Whitelist (許可のみ)

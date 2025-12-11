@@ -31,6 +31,9 @@ const categoryLargeInput = document.getElementById("categoryLargeInput");
 const categoryMiddleInput = document.getElementById("categoryMiddleInput");
 const categoryAddBtn = document.getElementById("categoryAddBtn");
 const categoryError = document.getElementById("categoryError");
+const categoryExportBtn = document.getElementById("categoryExportBtn");
+const categoryImportBtn = document.getElementById("categoryImportBtn");
+const categoryImportInput = document.getElementById("categoryImportInput");
 
 const CUSTOM_MODEL_VALUE = "__custom__";
 const DEFAULT_THRESHOLD = 70;
@@ -56,6 +59,10 @@ const MODEL_OPTIONS = [
   { value: "gemini-1.5-pro-latest", label: "Gemini 1.5 Pro（互換用）" },
   { value: "gemini-1.5-flash-latest", label: "Gemini 1.5 Flash（互換用）" },
 ];
+
+const MAX_IMPORT_BYTES = 200 * 1024;
+const CSV_HEADER = ["mode", "large", "middle"];
+const CSV_NEEDS_QUOTE_REGEX = /[",\n]/;
 
 let categoryRules = { whitelist: [], blacklist: [] };
 let currentCategoryTab = "whitelist";
@@ -245,6 +252,144 @@ const setCategoryError = (message) => {
   categoryError.style.display = message ? "block" : "none";
 };
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: シンプルなCSVパーサを自前実装
+const parseCsv = (text) => {
+  const rows = [];
+  let current = [];
+  let field = "";
+  let inQuote = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (inQuote) {
+      if (ch === '"' && next === '"') {
+        field += '"';
+        i += 1;
+      } else if (ch === '"') {
+        inQuote = false;
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuote = true;
+    } else if (ch === ",") {
+      current.push(field);
+      field = "";
+    } else if (ch === "\r") {
+      // skip
+    } else if (ch === "\n") {
+      current.push(field);
+      rows.push(current);
+      current = [];
+      field = "";
+    } else {
+      field += ch;
+    }
+  }
+  current.push(field);
+  rows.push(current);
+  return rows;
+};
+
+const stripBom = (text) =>
+  text.charCodeAt(0) === 0xfe_ff ? text.slice(1) : text;
+
+const buildCsvLine = (values) =>
+  values
+    .map((v) => {
+      const safe = `${v ?? ""}`;
+      if (CSV_NEEDS_QUOTE_REGEX.test(safe)) {
+        return `"${safe.replace(/"/g, '""')}"`;
+      }
+      return safe;
+    })
+    .join(",");
+
+const buildCategoryCsv = (rules) => {
+  const lines = [buildCsvLine(CSV_HEADER)];
+  const pushMode = (mode, list = []) => {
+    for (const item of list) {
+      lines.push(buildCsvLine([mode, item.large ?? "", item.middle ?? ""]));
+    }
+  };
+  pushMode("whitelist", rules.whitelist);
+  pushMode("blacklist", rules.blacklist);
+  return lines.join("\n");
+};
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 入力検証とマージを一括で実施
+const applyImportedRules = ({ rows }) => {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error("CSVにデータがありません");
+  }
+  const [header, ...data] = rows;
+  if (header.length < 3) {
+    throw new Error("ヘッダ行が不正です");
+  }
+  const normalizedHeader = header.map((h) => h?.trim?.().toLowerCase?.());
+  if (
+    normalizedHeader[0] !== "mode" ||
+    normalizedHeader[1] !== "large" ||
+    normalizedHeader[2] !== "middle"
+  ) {
+    throw new Error("ヘッダは mode,large,middle である必要があります");
+  }
+
+  const mapWhitelist = new Map(
+    (categoryRules.whitelist ?? []).map((item) => [
+      buildRuleKey(item),
+      { ...item },
+    ])
+  );
+  const mapBlacklist = new Map(
+    (categoryRules.blacklist ?? []).map((item) => [
+      buildRuleKey(item),
+      { ...item },
+    ])
+  );
+
+  let added = 0;
+  let updated = 0;
+
+  for (const row of data) {
+    if (!row || row.length === 0 || row.every((c) => !(c && `${c}`.trim()))) {
+      continue;
+    }
+    const [modeRaw, largeRaw, middleRaw] = row;
+    const mode = modeRaw?.trim?.().toLowerCase?.();
+    const largeDisplay = largeRaw?.trim?.() ?? "";
+    const middleDisplay = middleRaw?.trim?.() ?? "";
+    const large = normalizeCategory(largeDisplay);
+    const middle = normalizeCategory(middleDisplay);
+    if (!(mode && large && middle)) {
+      throw new Error("mode/large/middle のいずれかが空です");
+    }
+    if (mode !== "whitelist" && mode !== "blacklist") {
+      throw new Error(`mode が不正です: ${modeRaw}`);
+    }
+    const key = buildRuleKey({ large, middle });
+    const targetMap = mode === "whitelist" ? mapWhitelist : mapBlacklist;
+    if (targetMap.has(key)) {
+      updated += 1;
+    } else {
+      added += 1;
+    }
+    targetMap.set(key, { large: largeDisplay, middle: middleDisplay });
+  }
+
+  const mergedWhitelist = [...mapWhitelist.values()];
+  const mergedBlacklist = [...mapBlacklist.values()];
+  const totalCount = mergedWhitelist.length + mergedBlacklist.length;
+  if (totalCount > MAX_CATEGORY_RULES) {
+    throw new Error(
+      `ルール数が上限 (${MAX_CATEGORY_RULES} 件) を超えました: ${totalCount} 件`
+    );
+  }
+
+  categoryRules = { whitelist: mergedWhitelist, blacklist: mergedBlacklist };
+  renderCategoryList();
+  return { added, updated, total: totalCount };
+};
 const renderCategoryTab = (tab) => {
   currentCategoryTab = tab;
   const isWhitelist = tab === "whitelist";
@@ -352,8 +497,6 @@ const addCategoryRule = async () => {
   }
   list.push({ large: largeDisplay, middle: middleDisplay });
   categoryRules[currentCategoryTab] = list;
-  categoryLargeInput.value = "";
-  categoryMiddleInput.value = "";
   renderCategoryList();
   try {
     await persistCategoryRules();
@@ -361,6 +504,61 @@ const addCategoryRule = async () => {
     renderStatus(`ルール保存に失敗しました: ${error.message}`, true);
   }
 };
+
+const exportCategoryRules = () => {
+  try {
+    const csv = buildCategoryCsv(categoryRules);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "category_rules.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    renderStatus("ルールをエクスポートしました");
+  } catch (error) {
+    renderStatus(`エクスポートに失敗しました: ${error.message}`, true);
+  }
+};
+
+const handleImportFile = (file) =>
+  new Promise((resolve, reject) => {
+    if (!file) {
+      reject(new Error("ファイルが選択されていません"));
+      return;
+    }
+    if (file.size > MAX_IMPORT_BYTES) {
+      reject(
+        new Error("ファイルサイズが大きすぎます（200KB以下にしてください）")
+      );
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = stripBom(reader.result ?? "");
+        const rows = parseCsv(text);
+        const result = applyImportedRules({ rows });
+        persistCategoryRules()
+          .then(() => {
+            renderStatus(
+              `インポート完了: 追加 ${result.added} 件 / 上書き ${result.updated} 件（合計 ${result.total} 件）`
+            );
+            resolve();
+          })
+          .catch((error) => {
+            renderStatus(`保存に失敗しました: ${error.message}`, true);
+            reject(error);
+          });
+      } catch (error) {
+        renderStatus(`インポートに失敗しました: ${error.message}`, true);
+        reject(error);
+      }
+    };
+    reader.onerror = () =>
+      reject(new Error("ファイルの読み込みに失敗しました"));
+    reader.readAsText(file, "utf-8");
+  });
 
 const applySettingsToUi = (settings, area) => {
   if (settings.geminiApiKey) {
@@ -485,6 +683,22 @@ categoryAddBtn?.addEventListener("click", () => {
 
 categoryLargeInput?.addEventListener("input", () => setCategoryError(""));
 categoryMiddleInput?.addEventListener("input", () => setCategoryError(""));
+
+categoryExportBtn?.addEventListener("click", () => exportCategoryRules());
+
+categoryImportBtn?.addEventListener("click", () => {
+  if (categoryImportInput) {
+    categoryImportInput.value = "";
+    categoryImportInput.click();
+  }
+});
+
+categoryImportInput?.addEventListener("change", (event) => {
+  const file = event.target?.files?.[0];
+  handleImportFile(file).catch(() => {
+    // already reported in handleImportFile
+  });
+});
 
 if (geminiToggle) {
   geminiToggle.addEventListener("change", () => {
