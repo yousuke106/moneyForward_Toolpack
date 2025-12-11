@@ -23,9 +23,13 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   ];
 
   const selectClass = "mf-sub-select";
-  const injectedFlag = "mfSubInjected";
+  const labelInjectedFlag = "mfSubLabelInjected";
   const memoSelectorPrimary = "td.memo.form-switch-td";
   const memoSelectorFallback = '[data-title="メモ"]';
+  const labelCellClass = "mf-sub-label-cell";
+  const labelHeadClass = "mf-sub-label-head";
+  const satisfactionHeadClass = "mf-sat-head";
+  const satisfactionCellClass = "mf-sat-cell";
   const isDev =
     sessionStorage.getItem("mf_subs_debug") === "true" ||
     (globalThis.chrome?.runtime?.getManifest?.()?.version_name ?? "").includes(
@@ -62,6 +66,16 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const buildTxKey = (id) => `tx:${id}`;
   const buildStoreAmountKey = (store, amount) =>
     `sa:${normalizeStoreName(store)}|${amount}`;
+  const buildStoreDateKey = ({ store, amount, date }) => {
+    if (!(store && amount !== null && amount !== undefined && date)) {
+      return "";
+    }
+    const normalizedStore = normalizeStoreName(store);
+    if (!normalizedStore) {
+      return "";
+    }
+    return `sd:${normalizedStore}|${amount}|${date}`;
+  };
   const normalizeCategory = (text) => {
     if (!text) {
       return "";
@@ -224,23 +238,30 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const loadSatisfaction = () =>
     safeStorageGet(
       "local",
-      { satisfactionByTxId: {} },
-      { satisfactionByTxId: {} }
+      { satisfactionByTxId: {}, satisfactionByStoreDate: {} },
+      { satisfactionByTxId: {}, satisfactionByStoreDate: {} }
     );
 
-  const saveSatisfaction = async ({ txKey, rank, note }) => {
-    const { satisfactionByTxId } = await loadSatisfaction();
+  const saveSatisfaction = async ({ txKey, sdKey, rank, note }) => {
+    const maps = await loadSatisfaction();
     const trimmedNote = note?.trim?.() ?? "";
-    const hasValue = Boolean(rank) || Boolean(trimmedNote);
-    if (hasValue) {
-      satisfactionByTxId[txKey] = {
-        rank: rank || null,
-        note: trimmedNote,
-      };
-    } else {
-      delete satisfactionByTxId[txKey];
-    }
-    await safeStorageSet("local", { satisfactionByTxId });
+    const payload =
+      Boolean(rank) || Boolean(trimmedNote)
+        ? { rank: rank || null, note: trimmedNote }
+        : null;
+    const upsert = (map, key) => {
+      if (!key) {
+        return;
+      }
+      if (payload) {
+        map[key] = payload;
+      } else {
+        delete map[key];
+      }
+    };
+    upsert(maps.satisfactionByTxId, txKey);
+    upsert(maps.satisfactionByStoreDate, sdKey);
+    await safeStorageSet("local", maps);
   };
 
   const findTxId = (row) =>
@@ -282,6 +303,57 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return NEGATIVE_HEAD_REGEX.test(trimmed);
   };
 
+  const getMemoCell = (row) =>
+    row.querySelector(memoSelectorPrimary) ??
+    row.querySelector(memoSelectorFallback);
+
+  const ensureLabelHeader = () => {
+    const headRow = document.querySelector("#cf-detail-table thead tr");
+    if (!headRow) {
+      return;
+    }
+    if (headRow.querySelector(`.${labelHeadClass}`)) {
+      return;
+    }
+    const memoHead =
+      headRow.querySelector("th.memo") ??
+      headRow.querySelector('th[data-title="メモ"]');
+    const th = document.createElement("th");
+    th.className = labelHeadClass;
+    th.textContent = "サブスク";
+    if (memoHead?.parentElement) {
+      memoHead.parentElement.insertBefore(th, memoHead.nextSibling);
+    } else {
+      headRow.append(th);
+    }
+  };
+
+  const getOrCreateLabelCell = (row) => {
+    const memoCell = getMemoCell(row);
+    if (!memoCell) {
+      return null;
+    }
+    const next = memoCell.nextElementSibling;
+    if (next?.classList?.contains(labelCellClass)) {
+      return next;
+    }
+    const td = document.createElement("td");
+    td.className = labelCellClass;
+    memoCell.parentElement.insertBefore(td, memoCell.nextSibling);
+    return td;
+  };
+
+  const removeLabelUi = () => {
+    const head = document.querySelector(`th.${labelHeadClass}`);
+    head?.remove();
+    const rows = document.querySelectorAll("tr.transaction_list");
+    for (const row of rows) {
+      const cell = row.querySelector(`td.${labelCellClass}`);
+      cell?.remove();
+      row.dataset[labelInjectedFlag] = "";
+    }
+  };
+
   const setSelectValue = (row, label) => {
     const select = row.querySelector(`select.${selectClass}`);
     if (!select) {
@@ -296,15 +368,13 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const injectSelect = (row, onChange) => {
-    const memoCell =
-      row.querySelector(memoSelectorPrimary) ??
-      row.querySelector(memoSelectorFallback);
-    if (!memoCell) {
+    const labelCell = getOrCreateLabelCell(row);
+    if (!labelCell) {
       return;
     }
     if (
-      memoCell.dataset[injectedFlag] === "1" &&
-      memoCell.querySelector(`.${selectClass}`)
+      labelCell.dataset[labelInjectedFlag] === "1" &&
+      labelCell.querySelector(`.${selectClass}`)
     ) {
       return;
     }
@@ -337,8 +407,8 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
 
     wrapper.append(select);
     wrapper.addEventListener("click", stop);
-    memoCell.append(wrapper);
-    memoCell.dataset[injectedFlag] = "1";
+    labelCell.append(wrapper);
+    labelCell.dataset[labelInjectedFlag] = "1";
   };
 
   const ensureSatisfactionHeader = () => {
@@ -347,8 +417,10 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       return;
     }
     const thRank = document.createElement("th");
+    thRank.className = satisfactionHeadClass;
     thRank.textContent = "満足度";
     const thNote = document.createElement("th");
+    thNote.className = satisfactionHeadClass;
     thNote.textContent = "満足度メモ";
     headRow.append(thRank, thNote);
     headRow.dataset.mfSatHead = "1";
@@ -358,29 +430,37 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     const headRow = document.querySelector("#cf-detail-table thead tr");
     if (headRow && headRow.dataset.mfSatHead === "1") {
       headRow.dataset.mfSatHead = "";
-      headRow.querySelector("th:last-child")?.remove();
-      headRow.querySelector("th:last-child")?.remove();
+      const heads = headRow.querySelectorAll(`.${satisfactionHeadClass}`);
+      for (const th of heads) {
+        th.remove();
+      }
     }
     const rows = document.querySelectorAll("tr.transaction_list");
     for (const row of rows) {
       if (row.dataset.mfSatInjected === "1") {
         row.dataset.mfSatInjected = "";
-        row.querySelector("td:last-child")?.remove();
-        row.querySelector("td:last-child")?.remove();
+        const cells = row.querySelectorAll(`.${satisfactionCellClass}`);
+        for (const cell of cells) {
+          cell.remove();
+        }
       }
     }
   };
 
-  const injectSatisfactionCells = (row, satisfactionMap, onChange) => {
+  const injectSatisfactionCells = (row, satisfactionMaps, onChange) => {
     if (row.dataset.mfSatInjected === "1") {
       return;
     }
     const txId = findTxId(row);
-    if (!txId) {
-      return;
-    }
-    const txKey = buildTxKey(txId);
-    const saved = satisfactionMap?.[txKey] ?? {};
+    const amount = extractAmount(row);
+    const store = extractStore(row);
+    const date = parseDate(row);
+    const sdKey = buildStoreDateKey({ store, amount, date });
+    const txKey = txId ? buildTxKey(txId) : "";
+    const saved =
+      satisfactionMaps?.satisfactionByTxId?.[txKey] ??
+      (sdKey ? satisfactionMaps?.satisfactionByStoreDate?.[sdKey] : {}) ??
+      {};
 
     const stop = (event) => {
       event.stopPropagation();
@@ -388,6 +468,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     };
 
     const tdRank = document.createElement("td");
+    tdRank.className = satisfactionCellClass;
     const select = document.createElement("select");
     select.className = "mf-sat-select";
     select.setAttribute("aria-label", "満足度");
@@ -398,7 +479,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       select.append(option);
     }
     select.value = saved.rank ?? "";
-    select.addEventListener("change", () => onChange(txKey, select, null));
+    select.addEventListener("change", () =>
+      onChange({ txKey, sdKey, select, input: null })
+    );
     select.addEventListener("click", stop);
     select.addEventListener("mousedown", stop);
     select.addEventListener("mouseup", stop);
@@ -406,13 +489,14 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     tdRank.append(select);
 
     const tdNote = document.createElement("td");
+    tdNote.className = satisfactionCellClass;
     const input = document.createElement("input");
     input.type = "text";
     input.className = "mf-sat-note";
     input.maxLength = 120;
     input.setAttribute("aria-label", "満足度メモ");
     input.value = saved.note ?? "";
-    const handleInput = () => onChange(txKey, select, input);
+    const handleInput = () => onChange({ txKey, sdKey, select, input });
     input.addEventListener("change", handleInput);
     input.addEventListener("blur", handleInput);
     input.addEventListener("click", stop);
@@ -427,6 +511,14 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 初期化処理を一括で行うため許容
   const init = async () => {
+    const settings = await loadSettings();
+    const labelEnabled =
+      settings?.featureFlags?.subscriptionLabelEnabled ?? true;
+    if (!labelEnabled) {
+      removeLabelUi();
+      return;
+    }
+    ensureLabelHeader();
     const rows = document.querySelectorAll("tr.transaction_list");
     let missingMemo = 0;
     const { labelsByTxId, labelsByStoreAmount } = await loadLabels();
@@ -445,9 +537,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     };
 
     for (const row of rows) {
-      const memoCell =
-        row.querySelector(memoSelectorPrimary) ??
-        row.querySelector(memoSelectorFallback);
+      const memoCell = getMemoCell(row);
       if (!memoCell) {
         missingMemo += 1;
         continue;
@@ -483,15 +573,23 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       return;
     }
     ensureSatisfactionHeader();
-    const { satisfactionByTxId } = await loadSatisfaction();
+    const { satisfactionByTxId, satisfactionByStoreDate } =
+      await loadSatisfaction();
     const rows = document.querySelectorAll("tr.transaction_list");
-    const handleChange = async (txKey, selectEl, inputEl) => {
-      const rank = selectEl?.value ?? "";
-      const note = inputEl?.value ?? "";
-      await saveSatisfaction({ txKey, rank, note });
+    const handleChange = async ({ txKey, sdKey, select, input }) => {
+      const rank = select?.value ?? "";
+      const note = input?.value ?? "";
+      if (!(txKey || sdKey)) {
+        return;
+      }
+      await saveSatisfaction({ txKey, sdKey, rank, note });
     };
     for (const row of rows) {
-      injectSatisfactionCells(row, satisfactionByTxId, handleChange);
+      injectSatisfactionCells(
+        row,
+        { satisfactionByTxId, satisfactionByStoreDate },
+        handleChange
+      );
     }
   };
 

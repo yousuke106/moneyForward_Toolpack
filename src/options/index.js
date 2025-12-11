@@ -21,6 +21,9 @@ const duplicateToggle = document.getElementById("duplicateToggle");
 const downloaderToggle = document.getElementById("downloaderToggle");
 const categoryToggle = document.getElementById("categoryRuleToggle");
 const satisfactionToggle = document.getElementById("satisfactionToggle");
+const subscriptionLabelToggle = document.getElementById(
+  "subscriptionLabelToggle"
+);
 const categoryTabWhitelist = document.getElementById("categoryTabWhitelist");
 const categoryTabBlacklist = document.getElementById("categoryTabBlacklist");
 const categoryList = document.getElementById("categoryList");
@@ -120,6 +123,7 @@ const validate = () => {
   const downloaderEnabled = downloaderToggle?.checked ?? true;
   const categoryEnabled = categoryToggle?.checked ?? true;
   const satisfactionEnabled = satisfactionToggle?.checked ?? true;
+  const subscriptionLabelEnabled = subscriptionLabelToggle?.checked ?? true;
   return {
     valid,
     apiKey,
@@ -130,6 +134,7 @@ const validate = () => {
     downloaderEnabled,
     categoryEnabled,
     satisfactionEnabled,
+    subscriptionLabelEnabled,
   };
 };
 
@@ -157,6 +162,8 @@ const applyFeatureToggles = (settings) => {
     settings.featureFlags?.categoryRuleAlertEnabled ?? true;
   const satisfactionEnabled =
     settings.featureFlags?.satisfactionEnabled ?? true;
+  const subscriptionLabelEnabled =
+    settings.featureFlags?.subscriptionLabelEnabled ?? true;
 
   if (geminiToggle) {
     geminiToggle.checked = geminiEnabled;
@@ -172,6 +179,9 @@ const applyFeatureToggles = (settings) => {
   }
   if (satisfactionToggle) {
     satisfactionToggle.checked = satisfactionEnabled;
+  }
+  if (subscriptionLabelToggle) {
+    subscriptionLabelToggle.checked = subscriptionLabelEnabled;
   }
 };
 
@@ -189,6 +199,7 @@ const buildSettingsSnapshot = ({
   downloaderEnabled,
   categoryEnabled,
   satisfactionEnabled,
+  subscriptionLabelEnabled,
   loadedSettings = {},
 }) => {
   const apiKeyFallback = loadedSettings.geminiApiKey ?? "";
@@ -220,6 +231,7 @@ const buildSettingsSnapshot = ({
       downloaderContextMenuEnabled: downloaderEnabled,
       categoryRuleAlertEnabled: categoryEnabled,
       satisfactionEnabled,
+      subscriptionLabelEnabled,
     },
     categoryRules: resolvedCategoryRules,
   };
@@ -291,6 +303,7 @@ const persistCategoryRules = async () => {
       downloaderContextMenuEnabled: downloaderToggle?.checked ?? true,
       categoryRuleAlertEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
+      subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
     },
   };
   const snapshot = {
@@ -393,6 +406,9 @@ const load = async () => {
     if (satisfactionToggle) {
       satisfactionToggle.checked = true;
     }
+    if (subscriptionLabelToggle) {
+      subscriptionLabelToggle.checked = true;
+    }
     renderCategoryTab(currentCategoryTab);
     renderStatus("未保存です。設定を入力してください。");
     validate();
@@ -413,6 +429,7 @@ const onSave = async () => {
     downloaderEnabled,
     categoryEnabled,
     satisfactionEnabled,
+    subscriptionLabelEnabled,
   } = validate();
   if (!valid) {
     return;
@@ -428,6 +445,7 @@ const onSave = async () => {
       downloaderContextMenuEnabled: downloaderEnabled,
       categoryRuleAlertEnabled: categoryEnabled,
       satisfactionEnabled,
+      subscriptionLabelEnabled,
     },
     categoryRules,
   };
@@ -477,6 +495,7 @@ if (geminiToggle) {
       downloaderEnabled: downloaderToggle?.checked ?? true,
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
+      subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
     }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
@@ -492,6 +511,7 @@ if (duplicateToggle) {
       downloaderEnabled: downloaderToggle?.checked ?? true,
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
+      subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
     }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
@@ -507,6 +527,7 @@ if (downloaderToggle) {
       downloaderEnabled: downloaderToggle.checked,
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
+      subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
     }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
@@ -522,6 +543,7 @@ if (categoryToggle) {
       downloaderEnabled: downloaderToggle?.checked ?? true,
       categoryEnabled: categoryToggle.checked,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
+      subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
     }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
@@ -537,6 +559,23 @@ if (satisfactionToggle) {
       downloaderEnabled: downloaderToggle?.checked ?? true,
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle.checked,
+      subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
+    }).catch((error) =>
+      renderStatus(`保存に失敗しました: ${error.message}`, true)
+    );
+  });
+}
+
+if (subscriptionLabelToggle) {
+  subscriptionLabelToggle.addEventListener("change", () => {
+    validate();
+    saveFeatureToggle({
+      geminiEnabled: geminiToggle?.checked ?? true,
+      duplicateEnabled: duplicateToggle?.checked ?? true,
+      downloaderEnabled: downloaderToggle?.checked ?? true,
+      categoryEnabled: categoryToggle?.checked ?? true,
+      satisfactionEnabled: satisfactionToggle?.checked ?? true,
+      subscriptionLabelEnabled: subscriptionLabelToggle.checked,
     }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
@@ -549,6 +588,7 @@ const saveFeatureToggle = async ({
   downloaderEnabled,
   categoryEnabled,
   satisfactionEnabled,
+  subscriptionLabelEnabled,
 }) => {
   const loaded = await loadSettings();
   const snapshot = buildSettingsSnapshot({
@@ -557,6 +597,7 @@ const saveFeatureToggle = async ({
     downloaderEnabled,
     categoryEnabled,
     satisfactionEnabled,
+    subscriptionLabelEnabled,
     loadedSettings: loaded?.settings ?? {},
   });
   const result = await saveSettingsWithFallback(snapshot);

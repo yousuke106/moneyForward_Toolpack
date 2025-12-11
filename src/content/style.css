@@ -47,6 +47,16 @@
   box-sizing: border-box;
 }
 
+.mf-sub-label-cell {
+  min-width: 70px;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.mf-sub-label-cell .mf-sub-select {
+  width: 100%;
+}
+
 .mf-sat-select {
   width: 100%;
   min-width: 80px;

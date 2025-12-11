@@ -9,7 +9,8 @@
 ## 2. DOM 前提
 - 対象行セレクタ: `tr.transaction_list`（class 追加あり得るため前方一致で拾う）。
 - 取引ID: 行内 `input[name="user_asset_act[id]"]` の `value`。
-- メモ欄: 行内のメモセルに `<select>` を挿入する。既存メモ文字列がある場合は保持し、UIを隣接配置する。
+- ラベル列: テーブルにメモ列直後の専用 `<td class="mf-sub-label">` を生成・挿入し、その中に `<select>` を配置する。既存メモ文字列はメモ列に残し、並置しない。
+- 満足度列: ラベル列の右隣以降に挿入する（無効化時の削除処理がラベル列へ影響しないよう順序固定）。
 
 ## 3. ラベルモデル
 - 値: `"using" | "rarely" | "cancel" | ""`（未設定）。
@@ -18,6 +19,15 @@
 - キー形式:
   - 取引ID→ラベル: `tx:{transactionId}`。
   - 店名+金額→ラベル: `sa:{normalizedStore}|{amount}`。
+  - ラベル列の位置は固定（メモ直後）とし、DOM列の増減で store/amount 抽出インデックスがずれないようにする。
+
+## 3.1 満足度モデル（拡張）
+- 値: `"top1" | "top2" | "top3" | "worst1" | "worst2" | "worst3" | ""`、メモ文字列（最大120文字）。
+- キー形式を2系統に拡張:
+  - 取引IDキー: `tx:{transactionId}`
+  - 店名＋金額＋日付キー: `sd:{normalizedStore}|{amount}|{date}`（日付は YYYY-MM-DD）
+- 復元時は取引IDを優先し、無い場合は store+amount+date を使用。
+- 正規化ロジックと金額絶対値化はラベルと同じ関数を流用する。
 
 ## 4. ストレージ方針
 - 永続化: `chrome.storage.local` を既定とし、設定値（APIキー・しきい値）は同期を優先するため `chrome.storage.sync` を検討。
@@ -92,3 +102,26 @@
 - [x] Gemini API 呼び出しのエンドポイント権限を manifest に明記（`https://generativelanguage.googleapis.com/*`）。
 - [x] 解析中インジケーター（中央モーダル）の実装：
   - 全画面オーバーレイで操作抑止、進捗バー・バッチ数表示、完了/エラーで自動フェードアウト（実装済み: `.mf-sub-overlay`, `.mf-sub-indicator`）。
+
+## 10. 実装タスク（ラベル列分離対応）
+- [ ] `<td class="mf-sub-label">` をメモ列直後に生成し、`<select>` をここへ挿入するよう `injectSelect` を改修（メモ列依存を解消）。
+- [ ] ラベル列の重複注入防止フラグを新設（既存の `mfSubInjected` はメモ列依存なので分離）。
+- [ ] 満足度無効化処理で `last-child` 削除を廃止し、クラス指定で満足度列のみ削除する（ラベル列を巻き込まない）。
+- [ ] store/amount 抽出フォールバックが列追加でずれないことを再確認し、必要なら data-title ベース優先に寄せる。
+- [ ] ラベル列用スタイルを再調整（幅・整列・レスポンシブ時の折返し防止）。
+- [ ] 単体テスト/DOMテストに「ラベル列生成」「満足度OFFでもラベル列保持」を追加。
+- [ ] 手動確認手順を更新（メモ列維持、満足度OFF時の列存続、store/amount 抽出が壊れないこと）。
+
+## 11. 実装タスク（サブスク列表示トグル）
+- [ ] 設定画面に「サブスク列を表示する」トグルを追加し、`featureFlags.subscriptionLabelEnabled` として保存する。
+- [ ] content スクリプトでトグルを参照し、OFF 時はラベル列ヘッダとセルを除去し注入を停止する。
+- [ ] デフォルト値を `true` として `storage` の初期値・正規化に反映する。
+- [ ] 手動確認チェックリストにサブスク列トグルON/OFFの挙動を追加。
+
+## 12. 実装タスク（満足度キー拡張）
+- [ ] 満足度保存/読込を `tx:{id}` と `sd:{store}|{amount}|{date}` の2系統に拡張し、両方へ保存する。
+- [ ] 復元時は `tx` 優先、なければ `sd` を使用するフォールバックを実装。
+- [ ] 満足度データ構造 `satisfactionByTxId` を `satisfactionByTxId` + `satisfactionByStoreDateAmount` に拡張し、ストレージ読み書きを調整。
+- [ ] 正規化関数を流用し、日付は YYYY-MM-DD を利用（`parseDate` の結果をそのまま使用）。
+- [ ] 既存データ移行: 旧 `satisfactionByTxId` を読みつつ、新キーへの保存時に両方を書き込み（旧データは互換維持）。
+- [ ] 単体テスト/DOMテストを追加（store+amount+date キー、復元優先度、未設定削除）。

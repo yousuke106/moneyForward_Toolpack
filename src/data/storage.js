@@ -10,6 +10,7 @@ const DEFAULT_FEATURE_FLAGS = {
   downloaderContextMenuEnabled: true,
   categoryRuleAlertEnabled: true,
   satisfactionEnabled: true,
+  subscriptionLabelEnabled: true,
 };
 
 const DEFAULT_CATEGORY_RULES = {
