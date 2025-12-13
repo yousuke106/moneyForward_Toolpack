@@ -220,6 +220,7 @@ button:disabled {
   display: inline-block;
   width: 52px;
   height: 30px;
+  flex-shrink: 0;
 }
 
 .switch input {
