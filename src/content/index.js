@@ -335,12 +335,55 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     for (const el of current) {
       el.classList.remove(MASKING_TARGET_CLASS);
     }
+
+    // 明細テーブル: 「内容」「金額（円）」セルをマスク対象にする
     const rows = document.querySelectorAll("tr.transaction_list");
     for (const row of rows) {
       const storeCell = findStoreCell(row);
       const amountCell = findAmountCell(row);
       storeCell?.classList?.add?.(MASKING_TARGET_CLASS);
       amountCell?.classList?.add?.(MASKING_TARGET_CLASS);
+    }
+
+    // 上部の月次収支: 当月収入 / 当月支出 / 当月収支（合計値）をマスク対象にする
+    // `/cf` 家計簿: `#monthly_total_table_kakeibo`
+    // `/cf/summary`: `#monthly_total_table`
+    const monthlyTotalTableIds = [
+      "monthly_total_table_kakeibo",
+      "monthly_total_table",
+    ];
+    const targetIndexes = [0, 2, 4];
+    for (const tableId of monthlyTotalTableIds) {
+      const cells = document.querySelectorAll(
+        `#${tableId} tbody tr.js-monthly_total td`
+      );
+      for (const idx of targetIndexes) {
+        cells[idx]?.classList?.add?.(MASKING_TARGET_CLASS);
+      }
+    }
+
+    // カレンダー（月表示）内の金額（+ / -）をマスク対象にする
+    // FullCalendar のイベント表示は `.fc-event-title` 配下に plus/minus の span が描画される
+    const calendarAmounts = document.querySelectorAll(
+      "#calendar .fc-event-title .plus-color, #calendar .fc-event-title .minus-color"
+    );
+    for (const el of calendarAmounts) {
+      el.classList.add(MASKING_TARGET_CLASS);
+    }
+
+    // `/cf/summary` 支出セクション: 合計（例: `.heading-radius-box`）の金額をマスク対象にする
+    const cashflowOutTotal = document.querySelector(
+      "#cache-flow .heading-radius-box"
+    );
+    cashflowOutTotal?.classList?.add?.(MASKING_TARGET_CLASS);
+
+    // `/cf/summary` 支出内訳テーブル: 「金額」列（2列目）をマスク対象にする
+    // NOTE: 3列目（割合）も `.number` のため、列位置で特定する
+    const cashflowOutAmounts = document.querySelectorAll(
+      "#table-outgo tbody tr td:nth-child(2)"
+    );
+    for (const td of cashflowOutAmounts) {
+      td.classList.add(MASKING_TARGET_CLASS);
     }
   };
 
