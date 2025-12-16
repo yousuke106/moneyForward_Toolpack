@@ -245,7 +245,11 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
     item,
     chrome.runtime.id
   );
-  suggest(nextName ? { filename: nextName, conflictAction: "uniquify" } : {});
+  if (nextName) {
+    suggest({ filename: nextName, conflictAction: "uniquify" });
+  } else {
+    suggest();
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
