@@ -40,6 +40,12 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const CATEGORY_ALERT_ROW_CLASS = "mf-sub-category-alert-row";
   const CATEGORY_ALERT_CELL_CLASS = "mf-sub-category-alert-cell";
   const SESSION_FLAG_PREFIX = "mf_subs_checked_";
+  // 画面共有/スクショ対策として、内容/金額をCSSのblurでマスクする（DOM改変を最小化して壊れにくくする）
+  const UI_PREFS_KEY = "mf_toolpack_ui_prefs";
+  const DEFAULT_UI_PREFS = { maskingEnabled: true };
+  const MASKING_ROOT_CLASS = "mf-tp-mask-on";
+  const MASKING_TARGET_CLASS = "mf-tp-mask-target";
+  const MASKING_TOGGLE_ID = "mf-tp-mask-toggle";
   const DEFAULT_THRESHOLD = 70;
   const DEFAULT_MODEL = "gemini-2.5-flash";
   const EXCLUDE_KEYWORDS = ["振替", "投資積立", "住宅ローン", "固定費"];
@@ -210,6 +216,31 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       }
     });
 
+  const loadUiPrefs = async () => {
+    const syncRes = await safeStorageGet("sync", UI_PREFS_KEY, {
+      [UI_PREFS_KEY]: DEFAULT_UI_PREFS,
+    });
+    const syncPrefs = syncRes?.[UI_PREFS_KEY];
+    if (syncPrefs && typeof syncPrefs === "object") {
+      return { ...DEFAULT_UI_PREFS, ...syncPrefs };
+    }
+    const localRes = await safeStorageGet("local", UI_PREFS_KEY, {
+      [UI_PREFS_KEY]: DEFAULT_UI_PREFS,
+    });
+    const localPrefs = localRes?.[UI_PREFS_KEY];
+    if (localPrefs && typeof localPrefs === "object") {
+      return { ...DEFAULT_UI_PREFS, ...localPrefs };
+    }
+    return DEFAULT_UI_PREFS;
+  };
+
+  const saveUiPrefs = async (prefs) => {
+    const payload = { [UI_PREFS_KEY]: prefs };
+    // sync が使えない/失敗する環境でも継続できるよう、local にも同内容を保存する
+    await safeStorageSet("sync", payload);
+    await safeStorageSet("local", payload);
+  };
+
   const loadLabels = () =>
     safeStorageGet(
       "local",
@@ -293,6 +324,80 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     const text =
       cell?.querySelector(".offset")?.textContent ?? cell?.textContent ?? "";
     return parseAmount(text);
+  };
+
+  let maskingEnabled = DEFAULT_UI_PREFS.maskingEnabled;
+  let maskingLoaded = false;
+  let maskingLoading = false;
+
+  const markMaskTargets = () => {
+    const current = document.querySelectorAll(`.${MASKING_TARGET_CLASS}`);
+    for (const el of current) {
+      el.classList.remove(MASKING_TARGET_CLASS);
+    }
+    const rows = document.querySelectorAll("tr.transaction_list");
+    for (const row of rows) {
+      const storeCell = findStoreCell(row);
+      const amountCell = findAmountCell(row);
+      storeCell?.classList?.add?.(MASKING_TARGET_CLASS);
+      amountCell?.classList?.add?.(MASKING_TARGET_CLASS);
+    }
+  };
+
+  const updateMaskToggleUi = () => {
+    const button = document.getElementById(MASKING_TOGGLE_ID);
+    if (!button) {
+      return;
+    }
+    button.setAttribute("aria-pressed", maskingEnabled ? "true" : "false");
+    button.textContent = maskingEnabled ? "マスク: ON" : "マスク: OFF";
+    button.title = "内容/金額（円）をぼかして表示します（クリックで切替）";
+  };
+
+  const applyMasking = () => {
+    document.documentElement.classList.toggle(
+      MASKING_ROOT_CLASS,
+      maskingEnabled
+    );
+    markMaskTargets();
+    updateMaskToggleUi();
+  };
+
+  const ensureMaskToggleButton = () => {
+    if (document.getElementById(MASKING_TOGGLE_ID)) {
+      return;
+    }
+    if (!document.body) {
+      return;
+    }
+    const button = document.createElement("button");
+    button.id = MASKING_TOGGLE_ID;
+    button.type = "button";
+    button.className = "mf-tp-mask-toggle";
+    button.setAttribute("aria-label", "画面マスク切り替え");
+    button.addEventListener("click", async () => {
+      maskingEnabled = !maskingEnabled;
+      applyMasking();
+      // ユーザー操作の結果を永続化（再訪でもON/OFFを維持）
+      await saveUiPrefs({ maskingEnabled });
+    });
+    document.body.append(button);
+    updateMaskToggleUi();
+  };
+
+  const initializeMasking = async () => {
+    if (maskingLoaded || maskingLoading) {
+      return;
+    }
+    maskingLoading = true;
+    const prefs = await loadUiPrefs();
+    maskingEnabled = Boolean(
+      prefs?.maskingEnabled ?? DEFAULT_UI_PREFS.maskingEnabled
+    );
+    maskingLoaded = true;
+    maskingLoading = false;
+    ensureMaskToggleButton();
+    applyMasking();
   };
 
   const isNegativeAmount = (row) => {
@@ -600,9 +705,18 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         return;
       }
       pending = true;
-      requestAnimationFrame(() => {
-        pending = false;
-        init();
+      requestAnimationFrame(async () => {
+        try {
+          await initializeMasking();
+          await init();
+          if (maskingLoaded) {
+            // 月移動やフィルタでDOMが差し替わっても、マスク対象を再マーキングする
+            ensureMaskToggleButton();
+            applyMasking();
+          }
+        } finally {
+          pending = false;
+        }
       });
     };
   })();
@@ -1204,6 +1318,15 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         log("settings changed; session flag cleared (no auto-run)");
         scheduleDuplicateCheck();
         scheduleCategoryCheck();
+      }
+      if ((area === "sync" || area === "local") && changes[UI_PREFS_KEY]) {
+        const next = changes[UI_PREFS_KEY]?.newValue?.maskingEnabled;
+        if (typeof next === "boolean") {
+          maskingEnabled = next;
+          maskingLoaded = true;
+          ensureMaskToggleButton();
+          applyMasking();
+        }
       }
     });
   } catch (_e) {

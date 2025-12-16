@@ -7,3 +7,4 @@
 - `mf_downloader_context_menu_design.md` : 家計簿CSVを右クリックメニューからダウンロードする機能の移植設計メモとタスク草案。
 - `budget_category_rules_design.md` : 大項目×中項目の組み合わせ警告表示の詳細設計と実装タスク。
 - `satisfaction_columns_design.md` : 家計簿テーブルに満足度/メモ列を追加するための設計メモ（Top/Worst3 選択と理由メモ、保存スキーマ、タスク草案）。
+- `masking_design.md` : 画面共有・スクショ対策として「内容」「金額（円）」をぼかすマスキング機能の設計メモ（ワンクリック切替と永続化）。
