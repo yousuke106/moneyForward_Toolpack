@@ -38,7 +38,7 @@ CSSだけではフォールバック指定ができないため、content script
 
 ### 3. 永続化（再訪でもON）
 - ストレージキー: `mf_toolpack_ui_prefs`
-- 形: `{ maskingEnabled: boolean }`
+- 形: `{ maskingFeatureEnabled: boolean, maskingEnabled: boolean }`
 - 保存先: `chrome.storage.sync` を優先し、同値を `chrome.storage.local` にも保存（sync が使えない/失敗する環境のフォールバック）
 
 ## タスク
@@ -46,5 +46,5 @@ CSSだけではフォールバック指定ができないため、content script
 - [x] 「内容」「金額」セルへターゲットクラス付与
 - [x] blur の CSS 追加
 - [x] ON/OFF の永続化（再訪維持）
-- [ ] オプション画面でデフォルトON/OFFを設定可能にする
+- [x] オプション画面で「マスク機能の有効/無効」を設定可能にする（OFF時はボタン非表示）
 - [ ] ショートカット（Chrome commands）対応

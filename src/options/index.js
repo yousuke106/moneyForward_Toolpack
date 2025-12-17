@@ -4,6 +4,11 @@ import {
   normalizeCategory,
 } from "../data/category-rules.js";
 import { loadSettings, saveSettingsWithFallback } from "../data/storage.js";
+import {
+  DEFAULT_UI_PREFS,
+  loadUiPrefs,
+  saveUiPrefsPatch,
+} from "../data/ui-prefs.js";
 
 const apiKeyInput = document.getElementById("apiKey");
 const toggleApiKey = document.getElementById("toggleApiKey");
@@ -24,6 +29,7 @@ const satisfactionToggle = document.getElementById("satisfactionToggle");
 const subscriptionLabelToggle = document.getElementById(
   "subscriptionLabelToggle"
 );
+const maskingToggle = document.getElementById("maskingToggle");
 const categoryTabWhitelist = document.getElementById("categoryTabWhitelist");
 const categoryTabBlacklist = document.getElementById("categoryTabBlacklist");
 const categoryList = document.getElementById("categoryList");
@@ -189,6 +195,14 @@ const applyFeatureToggles = (settings) => {
   }
   if (subscriptionLabelToggle) {
     subscriptionLabelToggle.checked = subscriptionLabelEnabled;
+  }
+};
+
+const applyUiPrefs = (prefs) => {
+  const maskingFeatureEnabled =
+    prefs?.maskingFeatureEnabled ?? DEFAULT_UI_PREFS.maskingFeatureEnabled;
+  if (maskingToggle) {
+    maskingToggle.checked = maskingFeatureEnabled;
   }
 };
 
@@ -586,6 +600,9 @@ const applySettingsToUi = (settings, area) => {
 };
 
 const load = async () => {
+  const prefs = await loadUiPrefs().catch(() => DEFAULT_UI_PREFS);
+  applyUiPrefs(prefs);
+
   const result = await loadSettings();
   if (!result) {
     modelSelect.value = "gemini-2.5-flash";
@@ -712,6 +729,15 @@ if (geminiToggle) {
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
     }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
+    );
+  });
+}
+
+if (maskingToggle) {
+  maskingToggle.addEventListener("change", () => {
+    saveUiPrefsPatch({ maskingFeatureEnabled: maskingToggle.checked }).then(
+      () => renderStatus("画面マスキング設定を保存しました。"),
+      (error) => renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
   });
 }

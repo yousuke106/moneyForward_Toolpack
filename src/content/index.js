@@ -42,7 +42,10 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const SESSION_FLAG_PREFIX = "mf_subs_checked_";
   // 画面共有/スクショ対策として、内容/金額をCSSのblurでマスクする（DOM改変を最小化して壊れにくくする）
   const UI_PREFS_KEY = "mf_toolpack_ui_prefs";
-  const DEFAULT_UI_PREFS = { maskingEnabled: true };
+  const DEFAULT_UI_PREFS = {
+    maskingFeatureEnabled: true,
+    maskingEnabled: true,
+  };
   const MASKING_ROOT_CLASS = "mf-tp-mask-on";
   const MASKING_TARGET_CLASS = "mf-tp-mask-target";
   const MASKING_TOGGLE_ID = "mf-tp-mask-toggle";
@@ -234,8 +237,11 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return DEFAULT_UI_PREFS;
   };
 
-  const saveUiPrefs = async (prefs) => {
-    const payload = { [UI_PREFS_KEY]: prefs };
+  const saveUiPrefs = async (patch) => {
+    // 将来キーが増えても破壊しないよう、既存値とマージして保存する
+    const current = await loadUiPrefs();
+    const next = { ...current, ...(patch ?? {}) };
+    const payload = { [UI_PREFS_KEY]: next };
     // sync が使えない/失敗する環境でも継続できるよう、local にも同内容を保存する
     await safeStorageSet("sync", payload);
     await safeStorageSet("local", payload);
@@ -326,9 +332,10 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return parseAmount(text);
   };
 
+  let maskingFeatureEnabled = DEFAULT_UI_PREFS.maskingFeatureEnabled;
   let maskingEnabled = DEFAULT_UI_PREFS.maskingEnabled;
-  let maskingLoaded = false;
-  let maskingLoading = false;
+  let maskingPrefsLoaded = false;
+  let maskingPrefsLoading = false;
 
   const markMaskTargets = () => {
     const current = document.querySelectorAll(`.${MASKING_TARGET_CLASS}`);
@@ -406,7 +413,24 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     updateMaskToggleUi();
   };
 
+  const disableMaskingFeature = () => {
+    // 機能OFF時はボタンを出さず、画面を必ず非マスク状態に戻す（スクショ対策機能そのものを停止）
+    const button = document.getElementById(MASKING_TOGGLE_ID);
+    button?.remove();
+    document.documentElement.classList.remove(MASKING_ROOT_CLASS);
+
+    const currentTargets = document.querySelectorAll(
+      `.${MASKING_TARGET_CLASS}`
+    );
+    for (const el of currentTargets) {
+      el.classList.remove(MASKING_TARGET_CLASS);
+    }
+  };
+
   const ensureMaskToggleButton = () => {
+    if (!maskingFeatureEnabled) {
+      return;
+    }
     if (document.getElementById(MASKING_TOGGLE_ID)) {
       return;
     }
@@ -429,16 +453,25 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const initializeMasking = async () => {
-    if (maskingLoaded || maskingLoading) {
+    if (maskingPrefsLoaded || maskingPrefsLoading) {
       return;
     }
-    maskingLoading = true;
+    maskingPrefsLoading = true;
     const prefs = await loadUiPrefs();
+    maskingFeatureEnabled = Boolean(
+      prefs?.maskingFeatureEnabled ?? DEFAULT_UI_PREFS.maskingFeatureEnabled
+    );
     maskingEnabled = Boolean(
       prefs?.maskingEnabled ?? DEFAULT_UI_PREFS.maskingEnabled
     );
-    maskingLoaded = true;
-    maskingLoading = false;
+
+    maskingPrefsLoaded = true;
+    maskingPrefsLoading = false;
+
+    if (!maskingFeatureEnabled) {
+      disableMaskingFeature();
+      return;
+    }
     ensureMaskToggleButton();
     applyMasking();
   };
@@ -752,7 +785,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         try {
           await initializeMasking();
           await init();
-          if (maskingLoaded) {
+          if (maskingPrefsLoaded && maskingFeatureEnabled) {
             // 月移動やフィルタでDOMが差し替わっても、マスク対象を再マーキングする
             ensureMaskToggleButton();
             applyMasking();
@@ -1354,22 +1387,47 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   );
   satisfactionObserver.observe(listBody, { childList: true, subtree: true });
 
+  const isSettingsArea = (area) => area === "sync" || area === "local";
+
+  const handleSettingsChange = () => {
+    clearSessionFlags();
+    log("settings changed; session flag cleared (no auto-run)");
+    scheduleDuplicateCheck();
+    scheduleCategoryCheck();
+  };
+
+  const handleUiPrefsChange = (next) => {
+    const nextFeatureEnabled = next?.maskingFeatureEnabled;
+    const nextMaskingEnabled = next?.maskingEnabled;
+
+    if (typeof nextFeatureEnabled === "boolean") {
+      maskingFeatureEnabled = nextFeatureEnabled;
+    }
+    if (typeof nextMaskingEnabled === "boolean") {
+      maskingEnabled = nextMaskingEnabled;
+    }
+    maskingPrefsLoaded = true;
+
+    if (!maskingFeatureEnabled) {
+      disableMaskingFeature();
+      return;
+    }
+    ensureMaskToggleButton();
+    applyMasking();
+  };
+
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if ((area === "sync" || area === "local") && changes.settings) {
-        clearSessionFlags();
-        log("settings changed; session flag cleared (no auto-run)");
-        scheduleDuplicateCheck();
-        scheduleCategoryCheck();
+      if (!isSettingsArea(area)) {
+        return;
       }
-      if ((area === "sync" || area === "local") && changes[UI_PREFS_KEY]) {
-        const next = changes[UI_PREFS_KEY]?.newValue?.maskingEnabled;
-        if (typeof next === "boolean") {
-          maskingEnabled = next;
-          maskingLoaded = true;
-          ensureMaskToggleButton();
-          applyMasking();
-        }
+      if (changes.settings) {
+        handleSettingsChange();
+      }
+
+      const nextUiPrefs = changes[UI_PREFS_KEY]?.newValue;
+      if (nextUiPrefs) {
+        handleUiPrefsChange(nextUiPrefs);
       }
     });
   } catch (_e) {
