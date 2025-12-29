@@ -43,6 +43,22 @@ export const runDownloaderTests = () => {
   assert.strictEqual(noMatch, null);
   assert.deepStrictEqual(queue, ["b.csv"]);
 
+  const dataUrlQueue = ["c.csv"];
+  const dataUrlItem = { url: "data:text/csv;base64,ZW1wdHk=" };
+  const dataUrlMatch = dequeueNextFilename(dataUrlQueue, dataUrlItem, "ext-1");
+  assert.strictEqual(dataUrlMatch, "c.csv");
+  assert.deepStrictEqual(dataUrlQueue, []);
+
+  const otherDataUrlQueue = ["d.csv"];
+  const otherDataUrlItem = { url: "data:text/plain;base64,ZW1wdHk=" };
+  const otherDataUrlMatch = dequeueNextFilename(
+    otherDataUrlQueue,
+    otherDataUrlItem,
+    "ext-1"
+  );
+  assert.strictEqual(otherDataUrlMatch, null);
+  assert.deepStrictEqual(otherDataUrlQueue, ["d.csv"]);
+
   // toggle default/false
   assert.strictEqual(isDownloaderEnabled(undefined), true);
   assert.strictEqual(

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "MoneyForward Toolpack",
   "description": "MoneyForward MEの家計簿ページで、AIを活用してサブスクリプション（固定費）候補を自動検出し、可視化・管理・見直しをサポートする拡張機能です。",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "icons": {
     "16": "src/assets/icons/icon16.png",
     "48": "src/assets/icons/icon48.png",
@@ -31,7 +31,11 @@
   "options_page": "src/options/index.html",
   "content_scripts": [
     {
-      "matches": ["https://moneyforward.com/cf*"],
+      "matches": [
+        "https://moneyforward.com/",
+        "https://moneyforward.com/cf*",
+        "https://moneyforward.com/accounts"
+      ],
       "js": ["src/content/index.js"],
       "css": ["src/content/style.css"],
       "run_at": "document_idle"

@@ -337,12 +337,14 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   let maskingPrefsLoaded = false;
   let maskingPrefsLoading = false;
 
-  const markMaskTargets = () => {
+  const clearMaskTargets = () => {
     const current = document.querySelectorAll(`.${MASKING_TARGET_CLASS}`);
     for (const el of current) {
       el.classList.remove(MASKING_TARGET_CLASS);
     }
+  };
 
+  const markTransactionTableTargets = () => {
     // 明細テーブル: 「内容」「金額（円）」セルをマスク対象にする
     const rows = document.querySelectorAll("tr.transaction_list");
     for (const row of rows) {
@@ -351,7 +353,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       storeCell?.classList?.add?.(MASKING_TARGET_CLASS);
       amountCell?.classList?.add?.(MASKING_TARGET_CLASS);
     }
+  };
 
+  const markMonthlyTotalsTargets = () => {
     // 上部の月次収支: 当月収入 / 当月支出 / 当月収支（合計値）をマスク対象にする
     // `/cf` 家計簿: `#monthly_total_table_kakeibo`
     // `/cf/summary`: `#monthly_total_table`
@@ -368,7 +372,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         cells[idx]?.classList?.add?.(MASKING_TARGET_CLASS);
       }
     }
+  };
 
+  const markCalendarAmountTargets = () => {
     // カレンダー（月表示）内の金額（+ / -）をマスク対象にする
     // FullCalendar のイベント表示は `.fc-event-title` 配下に plus/minus の span が描画される
     const calendarAmounts = document.querySelectorAll(
@@ -377,7 +383,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     for (const el of calendarAmounts) {
       el.classList.add(MASKING_TARGET_CLASS);
     }
+  };
 
+  const markCashflowSummaryTargets = () => {
     // `/cf/summary` 支出セクション: 合計（例: `.heading-radius-box`）の金額をマスク対象にする
     const cashflowOutTotal = document.querySelector(
       "#cache-flow .heading-radius-box"
@@ -392,6 +400,94 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     for (const td of cashflowOutAmounts) {
       td.classList.add(MASKING_TARGET_CLASS);
     }
+  };
+
+  const markAccountsAssetTargets = () => {
+    // `/accounts` 資産一覧: 「資産」列のみをマスク対象にする
+    // NOTE: `.number` クラスが他列にも使われる可能性があるため、列位置で特定する
+    const accountsTable = document.querySelector("#account-table");
+    const assetHeader = accountsTable?.querySelector("th.asset");
+    const headerRow = assetHeader?.closest("tr");
+    const assetIndex = headerRow
+      ? Array.from(headerRow.children).indexOf(assetHeader)
+      : -1;
+    if (accountsTable && assetIndex >= 0) {
+      const accountRows = accountsTable.querySelectorAll("tbody tr");
+      for (const row of accountRows) {
+        const cells = row.querySelectorAll("td");
+        cells[assetIndex]?.classList?.add?.(MASKING_TARGET_CLASS);
+      }
+    }
+  };
+
+  const markHomePageTargets = () => {
+    // `/` ホーム: 上部合計の金額をマスク対象にする
+    const totalAmount = document.querySelector(".heading-radius-box");
+    totalAmount?.classList?.add?.(MASKING_TARGET_CLASS);
+
+    // `/` ホーム: 口座一覧の金額（`.accounts-list .amount .number`）をマスク対象にする
+    const accountAmounts = document.querySelectorAll(
+      ".accounts-list .amount .number"
+    );
+    for (const amount of accountAmounts) {
+      amount.classList.add(MASKING_TARGET_CLASS);
+    }
+
+    // `/` ホーム: 当月収入/支出/収支の金額セルをマスク対象にする
+    const monthlyTotals = document.querySelectorAll(
+      "#monthly_total_table_home tr.js-monthly_total td"
+    );
+    for (const cell of monthlyTotals) {
+      cell.classList.add(MASKING_TARGET_CLASS);
+    }
+
+    // `/` ホーム: 総資産セクションの金額をマスク対象にする
+    const totalAssetsAmount = document.querySelector(
+      ".total-assets .heading-radius-box"
+    );
+    totalAssetsAmount?.classList?.add?.(MASKING_TARGET_CLASS);
+
+    // `/` ホーム: 増減テーブルの金額（3列目）をマスク対象にする
+    const fluctuationAmounts = document.querySelectorAll(
+      ".total-assets .fluctuation-list tbody tr td:nth-child(3)"
+    );
+    for (const amount of fluctuationAmounts) {
+      amount.classList.add(MASKING_TARGET_CLASS);
+    }
+
+    // `/` ホーム: 内訳テーブルの金額（2列目）をマスク対象にする
+    const breakdownAmounts = document.querySelectorAll(
+      ".total-assets .breakdown-list tbody tr td:nth-child(2)"
+    );
+    for (const amount of breakdownAmounts) {
+      amount.classList.add(MASKING_TARGET_CLASS);
+    }
+
+    // `/` ホーム: 総資産グラフの数値ラベルをマスク対象にする（Highcharts）
+    const chartLabels = document.querySelectorAll(
+      ".total-assets .highcharts-data-labels text, .total-assets .highcharts-axis-labels text, .total-assets .highcharts-tooltip text"
+    );
+    for (const label of chartLabels) {
+      label.classList.add(MASKING_TARGET_CLASS);
+    }
+
+    // `/` ホーム: 資産の時系列推移グラフの縦軸ラベルをマスク対象にする
+    const assetTimeSeriesYAxisLabels = document.querySelectorAll(
+      ".highcharts-yaxis-labels text"
+    );
+    for (const label of assetTimeSeriesYAxisLabels) {
+      label.classList.add(MASKING_TARGET_CLASS);
+    }
+  };
+
+  const markMaskTargets = () => {
+    clearMaskTargets();
+    markTransactionTableTargets();
+    markMonthlyTotalsTargets();
+    markCalendarAmountTargets();
+    markCashflowSummaryTargets();
+    markAccountsAssetTargets();
+    markHomePageTargets();
   };
 
   const updateMaskToggleUi = () => {

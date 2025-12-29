@@ -1,4 +1,5 @@
 const HEADER_MONTH_REGEX = /(\d{4})\D+(\d{1,2})/;
+const CSV_DATA_URL_PREFIX = "data:text/csv";
 export const HEADER_SELECTORS = ["span.fc-header-title", ".fc-header-title"];
 export const BADGE_COLORS = {
   success: "#10b981",
@@ -35,7 +36,11 @@ export const buildCsvFilename = ({ year, month }) =>
   `moneyforward_${year}${padMonth(month)}.csv`;
 
 export const dequeueNextFilename = (pendingNames, item, extensionId) => {
-  if (item.byExtensionId === extensionId && pendingNames.length) {
+  // Some downloads (notably data URLs) may not populate byExtensionId reliably.
+  const isExtensionDownload = item?.byExtensionId === extensionId;
+  const isCsvDataUrl =
+    typeof item?.url === "string" && item.url.startsWith(CSV_DATA_URL_PREFIX);
+  if ((isExtensionDownload || isCsvDataUrl) && pendingNames.length) {
     return pendingNames.shift();
   }
   return null;
