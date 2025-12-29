@@ -32,3 +32,6 @@ tmp/
 
 # local tooling
 .serena/
+
+# store upload bundle
+store_upload/
