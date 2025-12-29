@@ -442,10 +442,13 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
 
     // `/` ホーム: 総資産セクションの金額をマスク対象にする
-    const totalAssetsAmount = document.querySelector(
-      ".total-assets .heading-radius-box"
+    // DOM差分に備えて、セクション内と単独表示の両方を拾う
+    const totalAssetsAmounts = document.querySelectorAll(
+      ".total-assets .heading-radius-box, p.number.heading-radius-box"
     );
-    totalAssetsAmount?.classList?.add?.(MASKING_TARGET_CLASS);
+    for (const amount of totalAssetsAmounts) {
+      amount.classList.add(MASKING_TARGET_CLASS);
+    }
 
     // `/` ホーム: 増減テーブルの金額（3列目）をマスク対象にする
     const fluctuationAmounts = document.querySelectorAll(
