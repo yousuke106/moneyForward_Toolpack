@@ -42,8 +42,22 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     memoText: "td.memo .noform span",
     noteText: "td.note",
   };
+  const getSessionFlag = (key) => sessionStorage.getItem(key);
+  const setSessionFlag = (key, value) => sessionStorage.setItem(key, value);
+  const removeSessionFlag = (key) => sessionStorage.removeItem(key);
+  const getSessionFlagKeys = () => {
+    const keys = [];
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+      const key = sessionStorage.key(i);
+      if (key) {
+        keys.push(key);
+      }
+    }
+    return keys;
+  };
+
   const isDev =
-    sessionStorage.getItem("mf_subs_debug") === "true" ||
+    getSessionFlag("mf_subs_debug") === "true" ||
     (globalThis.chrome?.runtime?.getManifest?.()?.version_name ?? "").includes(
       "dev"
     );
@@ -69,7 +83,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   let cachedUiPrefs = null;
   let cachedUiPrefsPromise = null;
   const log = (...args) => {
-    if (sessionStorage.getItem("mf_subs_debug") === "true" || isDev) {
+    if (getSessionFlag("mf_subs_debug") === "true" || isDev) {
       // eslint-disable-next-line no-console
       console.log("[mf-sub]", ...args);
     }
@@ -394,6 +408,99 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     removeMaskFromAll(current);
   };
 
+  const MASK_RULES = [
+    // `/cf` 家計簿 / `/cf/summary` 上部の月次収支テーブル
+    {
+      mode: "indexed",
+      selector: "#monthly_total_table_kakeibo tbody tr.js-monthly_total td",
+      indexes: [0, 2, 4],
+    },
+    {
+      mode: "indexed",
+      selector: "#monthly_total_table tbody tr.js-monthly_total td",
+      indexes: [0, 2, 4],
+    },
+    // `/cf` カレンダー・`/cf/summary` 内訳・`/cf/monthly` 内訳・`/spending_targets/edit` 先月実績
+    // `/analysis/monthly_reports` サマリ・`/` ホーム各種・`/accounts` 一覧などの金額表示
+    {
+      mode: "all",
+      selectors: [
+        "#calendar .fc-event-title .plus-color, #calendar .fc-event-title .minus-color",
+        "#table-outgo tbody tr td:nth-child(2)",
+        "#monthly-detail-content #monthly_list td.number",
+        "table.table-bordered td.last_month",
+        ".monthly-report-sum-head-block-item.amount, .monthly-report-sum-balance-item-amount",
+        ".accounts-list .amount .number",
+        "#monthly_total_table_home tr.js-monthly_total td",
+        ".total-assets .heading-radius-box, p.number.heading-radius-box",
+        ".total-assets .fluctuation-list tbody tr td:nth-child(3)",
+        ".total-assets .breakdown-list tbody tr td:nth-child(2)",
+        ".total-assets .highcharts-data-labels text, .total-assets .highcharts-axis-labels text, .total-assets .highcharts-tooltip text",
+        ".highcharts-yaxis-labels text",
+      ],
+    },
+    // `/cf/summary` 支出セクションの合計、`/` ホーム上部合計
+    {
+      mode: "first",
+      selectors: ["#cache-flow .heading-radius-box", ".heading-radius-box"],
+    },
+    // `/analysis/monthly_reports` 収入/支出内訳・資産推移、`/bs` バランスシート関連（円表記のみ）
+    {
+      mode: "yen",
+      selectors: [
+        ".monthly-report-detail-table-cell.right",
+        ".monthly-report-graph-container .highcharts-axis-labels text, .monthly-report-graph-container .highcharts-tooltip text",
+        'section[id^="portfolio_det_"] h1.heading-small',
+        'section[id^="portfolio_det_"] td.number',
+        ".balance-sheet .heading-radius-box-asset, .balance-sheet .heading-radius-box-liability, .balance-sheet .heading-radius-box-net",
+        ".balance-sheet .total-assets .heading-radius-box",
+        ".balance-sheet table.table-bordered tbody td",
+      ],
+    },
+  ];
+
+  const applyIndexedMaskRule = (rule) => {
+    const cells = document.querySelectorAll(rule.selector);
+    for (const idx of rule.indexes ?? []) {
+      addMaskClass(cells[idx]);
+    }
+  };
+
+  const applyFirstMaskRule = (rule) => {
+    for (const selector of rule.selectors ?? []) {
+      addMaskClass(document.querySelector(selector));
+    }
+  };
+
+  const applyYenMaskRule = (rule) => {
+    for (const selector of rule.selectors ?? []) {
+      const targets = document.querySelectorAll(selector);
+      for (const target of targets) {
+        maskIfContainsYen(target);
+      }
+    }
+  };
+
+  const applyAllMaskRule = (rule) => {
+    for (const selector of rule.selectors ?? []) {
+      addMaskToAll(document.querySelectorAll(selector));
+    }
+  };
+
+  const applyMaskRules = () => {
+    for (const rule of MASK_RULES) {
+      if (rule.mode === "indexed") {
+        applyIndexedMaskRule(rule);
+      } else if (rule.mode === "first") {
+        applyFirstMaskRule(rule);
+      } else if (rule.mode === "yen") {
+        applyYenMaskRule(rule);
+      } else {
+        applyAllMaskRule(rule);
+      }
+    }
+  };
+
   const markTransactionTableTargets = () => {
     // 明細テーブル: 「内容」「金額（円）」セルをマスク対象にする
     const rows = getTransactionRows();
@@ -405,66 +512,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
-  const markMonthlyTotalsTargets = () => {
-    // 上部の月次収支: 当月収入 / 当月支出 / 当月収支（合計値）をマスク対象にする
-    // `/cf` 家計簿: `#monthly_total_table_kakeibo`
-    // `/cf/summary`: `#monthly_total_table`
-    const monthlyTotalTableIds = [
-      "monthly_total_table_kakeibo",
-      "monthly_total_table",
-    ];
-    const targetIndexes = [0, 2, 4];
-    for (const tableId of monthlyTotalTableIds) {
-      const cells = document.querySelectorAll(
-        `#${tableId} tbody tr.js-monthly_total td`
-      );
-      for (const idx of targetIndexes) {
-        addMaskClass(cells[idx]);
-      }
-    }
-  };
-
-  const markCalendarAmountTargets = () => {
-    // カレンダー（月表示）内の金額（+ / -）をマスク対象にする
-    // FullCalendar のイベント表示は `.fc-event-title` 配下に plus/minus の span が描画される
-    const calendarAmounts = document.querySelectorAll(
-      "#calendar .fc-event-title .plus-color, #calendar .fc-event-title .minus-color"
-    );
-    addMaskToAll(calendarAmounts);
-  };
-
-  const markCashflowSummaryTargets = () => {
-    // `/cf/summary` 支出セクション: 合計（例: `.heading-radius-box`）の金額をマスク対象にする
-    const cashflowOutTotal = document.querySelector(
-      "#cache-flow .heading-radius-box"
-    );
-    addMaskClass(cashflowOutTotal);
-
-    // `/cf/summary` 支出内訳テーブル: 「金額」列（2列目）をマスク対象にする
-    // NOTE: 3列目（割合）も `.number` のため、列位置で特定する
-    const cashflowOutAmounts = document.querySelectorAll(
-      "#table-outgo tbody tr td:nth-child(2)"
-    );
-    addMaskToAll(cashflowOutAmounts);
-  };
-
-  const markMonthlyDetailTargets = () => {
-    // `/cf/monthly` 月次の内訳テーブル: 金額セルのみをマスク対象にする
-    const monthlyDetailAmounts = document.querySelectorAll(
-      "#monthly-detail-content #monthly_list td.number"
-    );
-    addMaskToAll(monthlyDetailAmounts);
-  };
-
-  const markSpendingTargetsLastMonthTargets = () => {
-    // `/spending_targets/edit` 先月実績の金額セルをマスク対象にする
-    const lastMonthAmounts = document.querySelectorAll(
-      "table.table-bordered td.last_month"
-    );
-    addMaskToAll(lastMonthAmounts);
-  };
-
-  const markBalanceSheetPortfolioTargets = () => {
+  const applyBalanceSheetPortfolioMask = () => {
     // `/bs` 資産構成: 「先月実績」ではなく資産金額（2列目）だけをマスク対象にする
     const portfolioLinks = document.querySelectorAll(
       'table.table-bordered tbody tr th a[href^="/bs/portfolio#"]'
@@ -486,25 +534,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
-  const markBalanceSheetDetailTargets = () => {
-    // `/bs/portfolio` 明細: 金額（円）だけをマスク対象にする
-    const detailSections = document.querySelectorAll(
-      'section[id^="portfolio_det_"]'
-    );
-    for (const section of detailSections) {
-      const totals = section.querySelectorAll("h1.heading-small");
-      for (const total of totals) {
-        maskIfContainsYen(total);
-      }
+  // markBalanceSheetDetailTargets はルール化により不要
 
-      const amountCells = section.querySelectorAll("td.number");
-      for (const cell of amountCells) {
-        maskIfContainsYen(cell);
-      }
-    }
-  };
-
-  const markBalanceSheetHistoryTargets = () => {
+  const applyBalanceSheetHistoryMask = () => {
     // `/bs` 資産推移: 金額（円）が入るセルだけをマスク対象にする
     const historyTables = document.querySelectorAll("table.table-bordered");
     for (const table of historyTables) {
@@ -525,7 +557,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
-  const markBalanceSheetLiabilityTargets = () => {
+  const applyBalanceSheetLiabilityMask = () => {
     // `/bs` 負債構成: 金額（円）が入るセルだけをマスク対象にする
     const liabilityRoot = document.querySelector("#bs-liability");
     if (liabilityRoot) {
@@ -549,71 +581,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
-  const markBalanceSheetSummaryTargets = () => {
-    // `/bs` バランスシート: 資産/負債/純資産の合計金額をマスク対象にする
-    const balanceSheet = document.querySelector(".balance-sheet");
-    if (!balanceSheet) {
-      return;
-    }
-
-    const summaryTotals = balanceSheet.querySelectorAll(
-      ".heading-radius-box-asset, .heading-radius-box-liability, .heading-radius-box-net"
-    );
-    for (const total of summaryTotals) {
-      maskIfContainsYen(total);
-    }
-
-    const totalAssetBoxes = balanceSheet.querySelectorAll(
-      ".total-assets .heading-radius-box"
-    );
-    for (const total of totalAssetBoxes) {
-      maskIfContainsYen(total);
-    }
-  };
-
-  const markBalanceSheetBreakdownTargets = () => {
-    // `/bs` バランスシート内訳: 金額（円）が入るセルだけをマスク対象にする
-    const balanceSheet = document.querySelector(".balance-sheet");
-    if (!balanceSheet) {
-      return;
-    }
-    const breakdownCells = balanceSheet.querySelectorAll(
-      "table.table-bordered tbody td"
-    );
-    for (const cell of breakdownCells) {
-      maskIfContainsYen(cell);
-    }
-  };
-
-  const markMonthlyReportTargets = () => {
-    // `/analysis/monthly_reports` レポート: 金額表示をマスク対象にする
-    const reportAmounts = document.querySelectorAll(
-      ".monthly-report-sum-head-block-item.amount, .monthly-report-sum-balance-item-amount"
-    );
-    addMaskToAll(reportAmounts);
-  };
-
-  const markMonthlyReportBreakdownTargets = () => {
-    // `/analysis/monthly_reports` 収入/支出内訳・資産推移: 金額セルのみをマスク対象にする
-    const breakdownAmountCells = document.querySelectorAll(
-      ".monthly-report-detail-table-cell.right"
-    );
-    for (const cell of breakdownAmountCells) {
-      const text = cell.textContent ?? "";
-      if (text.includes("¥") || text.includes("￥") || text.includes("円")) {
-        addMaskClass(cell);
-      }
-    }
-
-    const chartValueLabels = document.querySelectorAll(
-      ".monthly-report-graph-container .highcharts-axis-labels text, .monthly-report-graph-container .highcharts-tooltip text"
-    );
-    for (const label of chartValueLabels) {
-      maskIfContainsYen(label);
-    }
-  };
-
-  const markAccountsAssetTargets = () => {
+  const applyAccountsAssetMask = () => {
     // `/accounts` 資産一覧: 「資産」列のみをマスク対象にする
     // NOTE: `.number` クラスが他列にも使われる可能性があるため、列位置で特定する
     const accountsTable = document.querySelector("#account-table");
@@ -631,73 +599,18 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
-  const markHomePageTargets = () => {
-    // `/` ホーム: 上部合計の金額をマスク対象にする
-    const totalAmount = document.querySelector(".heading-radius-box");
-    addMaskClass(totalAmount);
-
-    // `/` ホーム: 口座一覧の金額（`.accounts-list .amount .number`）をマスク対象にする
-    const accountAmounts = document.querySelectorAll(
-      ".accounts-list .amount .number"
-    );
-    addMaskToAll(accountAmounts);
-
-    // `/` ホーム: 当月収入/支出/収支の金額セルをマスク対象にする
-    const monthlyTotals = document.querySelectorAll(
-      "#monthly_total_table_home tr.js-monthly_total td"
-    );
-    addMaskToAll(monthlyTotals);
-
-    // `/` ホーム: 総資産セクションの金額をマスク対象にする
-    // DOM差分に備えて、セクション内と単独表示の両方を拾う
-    const totalAssetsAmounts = document.querySelectorAll(
-      ".total-assets .heading-radius-box, p.number.heading-radius-box"
-    );
-    addMaskToAll(totalAssetsAmounts);
-
-    // `/` ホーム: 増減テーブルの金額（3列目）をマスク対象にする
-    const fluctuationAmounts = document.querySelectorAll(
-      ".total-assets .fluctuation-list tbody tr td:nth-child(3)"
-    );
-    addMaskToAll(fluctuationAmounts);
-
-    // `/` ホーム: 内訳テーブルの金額（2列目）をマスク対象にする
-    const breakdownAmounts = document.querySelectorAll(
-      ".total-assets .breakdown-list tbody tr td:nth-child(2)"
-    );
-    addMaskToAll(breakdownAmounts);
-
-    // `/` ホーム: 総資産グラフの数値ラベルをマスク対象にする（Highcharts）
-    const chartLabels = document.querySelectorAll(
-      ".total-assets .highcharts-data-labels text, .total-assets .highcharts-axis-labels text, .total-assets .highcharts-tooltip text"
-    );
-    addMaskToAll(chartLabels);
-
-    // `/` ホーム: 資産の時系列推移グラフの縦軸ラベルをマスク対象にする
-    const assetTimeSeriesYAxisLabels = document.querySelectorAll(
-      ".highcharts-yaxis-labels text"
-    );
-    addMaskToAll(assetTimeSeriesYAxisLabels);
+  const applyMaskSpecialCases = () => {
+    applyBalanceSheetPortfolioMask();
+    applyBalanceSheetHistoryMask();
+    applyBalanceSheetLiabilityMask();
+    applyAccountsAssetMask();
   };
 
   const markMaskTargets = () => {
     clearMaskTargets();
     markTransactionTableTargets();
-    markMonthlyTotalsTargets();
-    markCalendarAmountTargets();
-    markCashflowSummaryTargets();
-    markMonthlyDetailTargets();
-    markSpendingTargetsLastMonthTargets();
-    markBalanceSheetPortfolioTargets();
-    markBalanceSheetDetailTargets();
-    markBalanceSheetHistoryTargets();
-    markBalanceSheetLiabilityTargets();
-    markBalanceSheetSummaryTargets();
-    markBalanceSheetBreakdownTargets();
-    markMonthlyReportTargets();
-    markMonthlyReportBreakdownTargets();
-    markAccountsAssetTargets();
-    markHomePageTargets();
+    applyMaskRules();
+    applyMaskSpecialCases();
   };
 
   const updateMaskToggleUi = () => {
@@ -1197,22 +1110,18 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const isMonthProcessed = (month) =>
-    sessionStorage.getItem(`${SESSION_FLAG_PREFIX}${month}`) === "true";
+    getSessionFlag(`${SESSION_FLAG_PREFIX}${month}`) === "true";
 
   const markMonthProcessed = (month) => {
-    sessionStorage.setItem(`${SESSION_FLAG_PREFIX}${month}`, "true");
+    setSessionFlag(`${SESSION_FLAG_PREFIX}${month}`, "true");
   };
 
   const clearSessionFlags = () => {
-    const targets = [];
-    for (let i = 0; i < sessionStorage.length; i += 1) {
-      const k = sessionStorage.key(i);
-      if (k?.startsWith(SESSION_FLAG_PREFIX)) {
-        targets.push(k);
-      }
-    }
-    for (const k of targets) {
-      sessionStorage.removeItem(k);
+    const targets = getSessionFlagKeys().filter((key) =>
+      key.startsWith(SESSION_FLAG_PREFIX)
+    );
+    for (const key of targets) {
+      removeSessionFlag(key);
     }
   };
 
@@ -1315,45 +1224,69 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     card.classList.toggle("mf-sub-indicator--error", isError);
   };
 
+  const extractTransactionFields = (row) => {
+    const txId = findTxId(row);
+    const amount = extractAmount(row);
+    return {
+      txId,
+      amount,
+      store: extractStore(row),
+      date: parseDate(row),
+      isIncome: getIsIncome(row),
+      isTarget: getIsTarget(row),
+      category:
+        row.querySelector(SELECTORS.categoryLarge)?.textContent?.trim() ?? "",
+      subcategory:
+        row.querySelector(SELECTORS.categoryMiddle)?.textContent?.trim() ?? "",
+      memo: row.querySelector(SELECTORS.memoText)?.textContent?.trim() ?? "",
+      paymentSource:
+        row.querySelector(SELECTORS.noteText)?.textContent?.trim() ?? "",
+    };
+  };
+
+  const shouldIncludeTransaction = ({
+    txId,
+    amount,
+    isIncome,
+    isTarget,
+    isNegative,
+    category,
+    subcategory,
+  }) => {
+    const isValidAmount = amount !== null && amount !== undefined;
+    if (!(txId && isValidAmount)) {
+      return false;
+    }
+    if (!isTarget || isIncome || !isNegative) {
+      return false;
+    }
+    const labelText = `${category}${subcategory}` || "";
+    const excluded = EXCLUDE_KEYWORDS.some((kw) => labelText.includes(kw));
+    return !excluded;
+  };
+
   const collectTransactions = () => {
     const rows = getTransactionRows();
     const txList = [];
     for (const row of rows) {
-      const txId = findTxId(row);
-      const amount = extractAmount(row);
-      const store = extractStore(row);
-      const date = parseDate(row);
-      const isIncome = getIsIncome(row);
-      const isTarget = getIsTarget(row);
-      const category =
-        row.querySelector(SELECTORS.categoryLarge)?.textContent?.trim() ?? "";
-      const subcategory =
-        row.querySelector(SELECTORS.categoryMiddle)?.textContent?.trim() ?? "";
-      const memo =
-        row.querySelector(SELECTORS.memoText)?.textContent?.trim() ?? "";
-      const paymentSource =
-        row.querySelector(SELECTORS.noteText)?.textContent?.trim() ?? "";
-      const isValidAmount = amount !== null && amount !== undefined;
-      if (!(txId && isValidAmount)) {
-        continue;
-      }
-      if (!isTarget || isIncome || !isNegativeAmount(row)) {
-        continue;
-      }
-      const labelText = `${category}${subcategory}` || "";
-      const excluded = EXCLUDE_KEYWORDS.some((kw) => labelText.includes(kw));
-      if (excluded) {
+      const fields = extractTransactionFields(row);
+      if (
+        !shouldIncludeTransaction({
+          ...fields,
+          isNegative: isNegativeAmount(row),
+        })
+      ) {
         continue;
       }
       txList.push({
-        id: txId,
-        date,
-        store,
-        amount,
-        category,
-        subcategory,
-        memo,
-        payment_source: paymentSource,
+        id: fields.txId,
+        date: fields.date,
+        store: fields.store,
+        amount: fields.amount,
+        category: fields.category,
+        subcategory: fields.subcategory,
+        memo: fields.memo,
+        payment_source: fields.paymentSource,
       });
     }
     return txList;
