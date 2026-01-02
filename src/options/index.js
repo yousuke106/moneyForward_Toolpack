@@ -266,7 +266,6 @@ const setCategoryError = (message) => {
   categoryError.style.display = message ? "block" : "none";
 };
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: シンプルなCSVパーサを自前実装
 const parseCsv = (text) => {
   const rows = [];
   let current = [];

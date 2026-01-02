@@ -402,6 +402,177 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  const markMonthlyDetailTargets = () => {
+    // `/cf/monthly` 月次の内訳テーブル: 金額セルのみをマスク対象にする
+    const monthlyDetailAmounts = document.querySelectorAll(
+      "#monthly-detail-content #monthly_list td.number"
+    );
+    for (const cell of monthlyDetailAmounts) {
+      cell.classList.add(MASKING_TARGET_CLASS);
+    }
+  };
+
+  const markSpendingTargetsLastMonthTargets = () => {
+    // `/spending_targets/edit` 先月実績の金額セルをマスク対象にする
+    const lastMonthAmounts = document.querySelectorAll(
+      "table.table-bordered td.last_month"
+    );
+    for (const cell of lastMonthAmounts) {
+      cell.classList.add(MASKING_TARGET_CLASS);
+    }
+  };
+
+  const markBalanceSheetPortfolioTargets = () => {
+    // `/bs` 資産構成: 「先月実績」ではなく資産金額（2列目）だけをマスク対象にする
+    const portfolioLinks = document.querySelectorAll(
+      'table.table-bordered tbody tr th a[href^="/bs/portfolio#"]'
+    );
+    for (const link of portfolioLinks) {
+      const row = link.closest("tr");
+      const amountCell = row?.querySelector("td:nth-child(2)");
+      amountCell?.classList?.add?.(MASKING_TARGET_CLASS);
+    }
+  };
+
+  const maskIfContainsYen = (element) => {
+    if (!element) {
+      return;
+    }
+    const text = element.textContent ?? "";
+    if (text.includes("円") || text.includes("¥") || text.includes("￥")) {
+      element.classList.add(MASKING_TARGET_CLASS);
+    }
+  };
+
+  const markBalanceSheetDetailTargets = () => {
+    // `/bs/portfolio` 明細: 金額（円）だけをマスク対象にする
+    const detailSections = document.querySelectorAll(
+      'section[id^="portfolio_det_"]'
+    );
+    for (const section of detailSections) {
+      const totals = section.querySelectorAll("h1.heading-small");
+      for (const total of totals) {
+        maskIfContainsYen(total);
+      }
+
+      const amountCells = section.querySelectorAll("td.number");
+      for (const cell of amountCells) {
+        maskIfContainsYen(cell);
+      }
+    }
+  };
+
+  const markBalanceSheetHistoryTargets = () => {
+    // `/bs` 資産推移: 金額（円）が入るセルだけをマスク対象にする
+    const historyTables = document.querySelectorAll("table.table-bordered");
+    for (const table of historyTables) {
+      const rows = table.querySelectorAll("tbody tr");
+      if (rows.length === 0) {
+        continue;
+      }
+      const hasHistoryLink = table.querySelector(
+        'a[href^="/bs/history/list/"]'
+      );
+      if (!hasHistoryLink) {
+        continue;
+      }
+      const amountCells = table.querySelectorAll("tbody tr td");
+      for (const cell of amountCells) {
+        maskIfContainsYen(cell);
+      }
+    }
+  };
+
+  const markBalanceSheetLiabilityTargets = () => {
+    // `/bs` 負債構成: 金額（円）が入るセルだけをマスク対象にする
+    const liabilityRoot = document.querySelector("#bs-liability");
+    if (liabilityRoot) {
+      const summaryTotal = liabilityRoot.querySelector(".heading-radius-box");
+      maskIfContainsYen(summaryTotal);
+
+      const summaryAmountCells = liabilityRoot.querySelectorAll(
+        "table.table-bordered tbody tr td:nth-child(2)"
+      );
+      for (const cell of summaryAmountCells) {
+        maskIfContainsYen(cell);
+      }
+    }
+
+    // `/bs/liability` 負債詳細: 残高（円）のセルだけをマスク対象にする
+    const liabilityDetailCells = document.querySelectorAll(
+      "#liability_det table.table-det tbody td.number"
+    );
+    for (const cell of liabilityDetailCells) {
+      maskIfContainsYen(cell);
+    }
+  };
+
+  const markBalanceSheetSummaryTargets = () => {
+    // `/bs` バランスシート: 資産/負債/純資産の合計金額をマスク対象にする
+    const balanceSheet = document.querySelector(".balance-sheet");
+    if (!balanceSheet) {
+      return;
+    }
+
+    const summaryTotals = balanceSheet.querySelectorAll(
+      ".heading-radius-box-asset, .heading-radius-box-liability, .heading-radius-box-net"
+    );
+    for (const total of summaryTotals) {
+      maskIfContainsYen(total);
+    }
+
+    const totalAssetBoxes = balanceSheet.querySelectorAll(
+      ".total-assets .heading-radius-box"
+    );
+    for (const total of totalAssetBoxes) {
+      maskIfContainsYen(total);
+    }
+  };
+
+  const markBalanceSheetBreakdownTargets = () => {
+    // `/bs` バランスシート内訳: 金額（円）が入るセルだけをマスク対象にする
+    const balanceSheet = document.querySelector(".balance-sheet");
+    if (!balanceSheet) {
+      return;
+    }
+    const breakdownCells = balanceSheet.querySelectorAll(
+      "table.table-bordered tbody td"
+    );
+    for (const cell of breakdownCells) {
+      maskIfContainsYen(cell);
+    }
+  };
+
+  const markMonthlyReportTargets = () => {
+    // `/analysis/monthly_reports` レポート: 金額表示をマスク対象にする
+    const reportAmounts = document.querySelectorAll(
+      ".monthly-report-sum-head-block-item.amount, .monthly-report-sum-balance-item-amount"
+    );
+    for (const amount of reportAmounts) {
+      amount.classList.add(MASKING_TARGET_CLASS);
+    }
+  };
+
+  const markMonthlyReportBreakdownTargets = () => {
+    // `/analysis/monthly_reports` 収入/支出内訳・資産推移: 金額セルのみをマスク対象にする
+    const breakdownAmountCells = document.querySelectorAll(
+      ".monthly-report-detail-table-cell.right"
+    );
+    for (const cell of breakdownAmountCells) {
+      const text = cell.textContent ?? "";
+      if (text.includes("¥") || text.includes("￥") || text.includes("円")) {
+        cell.classList.add(MASKING_TARGET_CLASS);
+      }
+    }
+
+    const chartValueLabels = document.querySelectorAll(
+      ".monthly-report-graph-container .highcharts-axis-labels text, .monthly-report-graph-container .highcharts-tooltip text"
+    );
+    for (const label of chartValueLabels) {
+      maskIfContainsYen(label);
+    }
+  };
+
   const markAccountsAssetTargets = () => {
     // `/accounts` 資産一覧: 「資産」列のみをマスク対象にする
     // NOTE: `.number` クラスが他列にも使われる可能性があるため、列位置で特定する
@@ -489,6 +660,16 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     markMonthlyTotalsTargets();
     markCalendarAmountTargets();
     markCashflowSummaryTargets();
+    markMonthlyDetailTargets();
+    markSpendingTargetsLastMonthTargets();
+    markBalanceSheetPortfolioTargets();
+    markBalanceSheetDetailTargets();
+    markBalanceSheetHistoryTargets();
+    markBalanceSheetLiabilityTargets();
+    markBalanceSheetSummaryTargets();
+    markBalanceSheetBreakdownTargets();
+    markMonthlyReportTargets();
+    markMonthlyReportBreakdownTargets();
     markAccountsAssetTargets();
     markHomePageTargets();
   };
@@ -1214,7 +1395,6 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: ハイライト処理を一括で実行するため許容
   const applyGeminiHighlight = (results, threshold) => {
     const rows = document.querySelectorAll("tr.transaction_list");
     const scoreMap = new Map();
