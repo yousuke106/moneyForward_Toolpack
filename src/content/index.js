@@ -30,6 +30,18 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const labelHeadClass = "mf-sub-label-head";
   const satisfactionHeadClass = "mf-sat-head";
   const satisfactionCellClass = "mf-sat-cell";
+  const SELECTORS = {
+    transactionRow: "tr.transaction_list",
+    tableHeadRow: "#cf-detail-table thead tr",
+    tableBodyPrimary: "#cf-detail-table tbody.list_body",
+    tableBodyFallback: "#cf-detail-table tbody",
+    memoHeadPrimary: "th.memo",
+    memoHeadFallback: 'th[data-title="メモ"]',
+    categoryLarge: ".v_l_ctg",
+    categoryMiddle: ".v_m_ctg",
+    memoText: "td.memo .noform span",
+    noteText: "td.note",
+  };
   const isDev =
     sessionStorage.getItem("mf_subs_debug") === "true" ||
     (globalThis.chrome?.runtime?.getManifest?.()?.version_name ?? "").includes(
@@ -52,6 +64,10 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const DEFAULT_THRESHOLD = 70;
   const DEFAULT_MODEL = "gemini-2.5-flash";
   const EXCLUDE_KEYWORDS = ["振替", "投資積立", "住宅ローン", "固定費"];
+  let cachedSettings = null;
+  let cachedSettingsPromise = null;
+  let cachedUiPrefs = null;
+  let cachedUiPrefsPromise = null;
   const log = (...args) => {
     if (sessionStorage.getItem("mf_subs_debug") === "true" || isDev) {
       // eslint-disable-next-line no-console
@@ -220,21 +236,35 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     });
 
   const loadUiPrefs = async () => {
-    const syncRes = await safeStorageGet("sync", UI_PREFS_KEY, {
-      [UI_PREFS_KEY]: DEFAULT_UI_PREFS,
-    });
-    const syncPrefs = syncRes?.[UI_PREFS_KEY];
-    if (syncPrefs && typeof syncPrefs === "object") {
-      return { ...DEFAULT_UI_PREFS, ...syncPrefs };
+    if (cachedUiPrefs) {
+      return cachedUiPrefs;
     }
-    const localRes = await safeStorageGet("local", UI_PREFS_KEY, {
-      [UI_PREFS_KEY]: DEFAULT_UI_PREFS,
-    });
-    const localPrefs = localRes?.[UI_PREFS_KEY];
-    if (localPrefs && typeof localPrefs === "object") {
-      return { ...DEFAULT_UI_PREFS, ...localPrefs };
+    if (cachedUiPrefsPromise) {
+      return cachedUiPrefsPromise;
     }
-    return DEFAULT_UI_PREFS;
+    cachedUiPrefsPromise = (async () => {
+      const syncRes = await safeStorageGet("sync", UI_PREFS_KEY, {
+        [UI_PREFS_KEY]: DEFAULT_UI_PREFS,
+      });
+      const syncPrefs = syncRes?.[UI_PREFS_KEY];
+      if (syncPrefs && typeof syncPrefs === "object") {
+        return { ...DEFAULT_UI_PREFS, ...syncPrefs };
+      }
+      const localRes = await safeStorageGet("local", UI_PREFS_KEY, {
+        [UI_PREFS_KEY]: DEFAULT_UI_PREFS,
+      });
+      const localPrefs = localRes?.[UI_PREFS_KEY];
+      if (localPrefs && typeof localPrefs === "object") {
+        return { ...DEFAULT_UI_PREFS, ...localPrefs };
+      }
+      return DEFAULT_UI_PREFS;
+    })();
+    try {
+      cachedUiPrefs = await cachedUiPrefsPromise;
+      return cachedUiPrefs;
+    } finally {
+      cachedUiPrefsPromise = null;
+    }
   };
 
   const saveUiPrefs = async (patch) => {
@@ -245,6 +275,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     // sync が使えない/失敗する環境でも継続できるよう、local にも同内容を保存する
     await safeStorageSet("sync", payload);
     await safeStorageSet("local", payload);
+    cachedUiPrefs = next;
   };
 
   const loadLabels = () =>
@@ -332,6 +363,27 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return parseAmount(text);
   };
 
+  const getTransactionRows = () =>
+    document.querySelectorAll(SELECTORS.transactionRow);
+
+  const addMaskClass = (element) =>
+    element?.classList?.add?.(MASKING_TARGET_CLASS);
+
+  const addMaskToAll = (elements) => {
+    for (const el of elements) {
+      addMaskClass(el);
+    }
+  };
+
+  const removeMaskClass = (element) =>
+    element?.classList?.remove?.(MASKING_TARGET_CLASS);
+
+  const removeMaskFromAll = (elements) => {
+    for (const el of elements) {
+      removeMaskClass(el);
+    }
+  };
+
   let maskingFeatureEnabled = DEFAULT_UI_PREFS.maskingFeatureEnabled;
   let maskingEnabled = DEFAULT_UI_PREFS.maskingEnabled;
   let maskingPrefsLoaded = false;
@@ -339,19 +391,17 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
 
   const clearMaskTargets = () => {
     const current = document.querySelectorAll(`.${MASKING_TARGET_CLASS}`);
-    for (const el of current) {
-      el.classList.remove(MASKING_TARGET_CLASS);
-    }
+    removeMaskFromAll(current);
   };
 
   const markTransactionTableTargets = () => {
     // 明細テーブル: 「内容」「金額（円）」セルをマスク対象にする
-    const rows = document.querySelectorAll("tr.transaction_list");
+    const rows = getTransactionRows();
     for (const row of rows) {
       const storeCell = findStoreCell(row);
       const amountCell = findAmountCell(row);
-      storeCell?.classList?.add?.(MASKING_TARGET_CLASS);
-      amountCell?.classList?.add?.(MASKING_TARGET_CLASS);
+      addMaskClass(storeCell);
+      addMaskClass(amountCell);
     }
   };
 
@@ -369,7 +419,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         `#${tableId} tbody tr.js-monthly_total td`
       );
       for (const idx of targetIndexes) {
-        cells[idx]?.classList?.add?.(MASKING_TARGET_CLASS);
+        addMaskClass(cells[idx]);
       }
     }
   };
@@ -380,9 +430,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     const calendarAmounts = document.querySelectorAll(
       "#calendar .fc-event-title .plus-color, #calendar .fc-event-title .minus-color"
     );
-    for (const el of calendarAmounts) {
-      el.classList.add(MASKING_TARGET_CLASS);
-    }
+    addMaskToAll(calendarAmounts);
   };
 
   const markCashflowSummaryTargets = () => {
@@ -390,16 +438,14 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     const cashflowOutTotal = document.querySelector(
       "#cache-flow .heading-radius-box"
     );
-    cashflowOutTotal?.classList?.add?.(MASKING_TARGET_CLASS);
+    addMaskClass(cashflowOutTotal);
 
     // `/cf/summary` 支出内訳テーブル: 「金額」列（2列目）をマスク対象にする
     // NOTE: 3列目（割合）も `.number` のため、列位置で特定する
     const cashflowOutAmounts = document.querySelectorAll(
       "#table-outgo tbody tr td:nth-child(2)"
     );
-    for (const td of cashflowOutAmounts) {
-      td.classList.add(MASKING_TARGET_CLASS);
-    }
+    addMaskToAll(cashflowOutAmounts);
   };
 
   const markMonthlyDetailTargets = () => {
@@ -407,9 +453,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     const monthlyDetailAmounts = document.querySelectorAll(
       "#monthly-detail-content #monthly_list td.number"
     );
-    for (const cell of monthlyDetailAmounts) {
-      cell.classList.add(MASKING_TARGET_CLASS);
-    }
+    addMaskToAll(monthlyDetailAmounts);
   };
 
   const markSpendingTargetsLastMonthTargets = () => {
@@ -417,9 +461,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     const lastMonthAmounts = document.querySelectorAll(
       "table.table-bordered td.last_month"
     );
-    for (const cell of lastMonthAmounts) {
-      cell.classList.add(MASKING_TARGET_CLASS);
-    }
+    addMaskToAll(lastMonthAmounts);
   };
 
   const markBalanceSheetPortfolioTargets = () => {
@@ -430,7 +472,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     for (const link of portfolioLinks) {
       const row = link.closest("tr");
       const amountCell = row?.querySelector("td:nth-child(2)");
-      amountCell?.classList?.add?.(MASKING_TARGET_CLASS);
+      addMaskClass(amountCell);
     }
   };
 
@@ -440,7 +482,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
     const text = element.textContent ?? "";
     if (text.includes("円") || text.includes("¥") || text.includes("￥")) {
-      element.classList.add(MASKING_TARGET_CLASS);
+      addMaskClass(element);
     }
   };
 
@@ -548,9 +590,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     const reportAmounts = document.querySelectorAll(
       ".monthly-report-sum-head-block-item.amount, .monthly-report-sum-balance-item-amount"
     );
-    for (const amount of reportAmounts) {
-      amount.classList.add(MASKING_TARGET_CLASS);
-    }
+    addMaskToAll(reportAmounts);
   };
 
   const markMonthlyReportBreakdownTargets = () => {
@@ -561,7 +601,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     for (const cell of breakdownAmountCells) {
       const text = cell.textContent ?? "";
       if (text.includes("¥") || text.includes("￥") || text.includes("円")) {
-        cell.classList.add(MASKING_TARGET_CLASS);
+        addMaskClass(cell);
       }
     }
 
@@ -586,7 +626,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       const accountRows = accountsTable.querySelectorAll("tbody tr");
       for (const row of accountRows) {
         const cells = row.querySelectorAll("td");
-        cells[assetIndex]?.classList?.add?.(MASKING_TARGET_CLASS);
+        addMaskClass(cells[assetIndex]);
       }
     }
   };
@@ -594,64 +634,50 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const markHomePageTargets = () => {
     // `/` ホーム: 上部合計の金額をマスク対象にする
     const totalAmount = document.querySelector(".heading-radius-box");
-    totalAmount?.classList?.add?.(MASKING_TARGET_CLASS);
+    addMaskClass(totalAmount);
 
     // `/` ホーム: 口座一覧の金額（`.accounts-list .amount .number`）をマスク対象にする
     const accountAmounts = document.querySelectorAll(
       ".accounts-list .amount .number"
     );
-    for (const amount of accountAmounts) {
-      amount.classList.add(MASKING_TARGET_CLASS);
-    }
+    addMaskToAll(accountAmounts);
 
     // `/` ホーム: 当月収入/支出/収支の金額セルをマスク対象にする
     const monthlyTotals = document.querySelectorAll(
       "#monthly_total_table_home tr.js-monthly_total td"
     );
-    for (const cell of monthlyTotals) {
-      cell.classList.add(MASKING_TARGET_CLASS);
-    }
+    addMaskToAll(monthlyTotals);
 
     // `/` ホーム: 総資産セクションの金額をマスク対象にする
     // DOM差分に備えて、セクション内と単独表示の両方を拾う
     const totalAssetsAmounts = document.querySelectorAll(
       ".total-assets .heading-radius-box, p.number.heading-radius-box"
     );
-    for (const amount of totalAssetsAmounts) {
-      amount.classList.add(MASKING_TARGET_CLASS);
-    }
+    addMaskToAll(totalAssetsAmounts);
 
     // `/` ホーム: 増減テーブルの金額（3列目）をマスク対象にする
     const fluctuationAmounts = document.querySelectorAll(
       ".total-assets .fluctuation-list tbody tr td:nth-child(3)"
     );
-    for (const amount of fluctuationAmounts) {
-      amount.classList.add(MASKING_TARGET_CLASS);
-    }
+    addMaskToAll(fluctuationAmounts);
 
     // `/` ホーム: 内訳テーブルの金額（2列目）をマスク対象にする
     const breakdownAmounts = document.querySelectorAll(
       ".total-assets .breakdown-list tbody tr td:nth-child(2)"
     );
-    for (const amount of breakdownAmounts) {
-      amount.classList.add(MASKING_TARGET_CLASS);
-    }
+    addMaskToAll(breakdownAmounts);
 
     // `/` ホーム: 総資産グラフの数値ラベルをマスク対象にする（Highcharts）
     const chartLabels = document.querySelectorAll(
       ".total-assets .highcharts-data-labels text, .total-assets .highcharts-axis-labels text, .total-assets .highcharts-tooltip text"
     );
-    for (const label of chartLabels) {
-      label.classList.add(MASKING_TARGET_CLASS);
-    }
+    addMaskToAll(chartLabels);
 
     // `/` ホーム: 資産の時系列推移グラフの縦軸ラベルをマスク対象にする
     const assetTimeSeriesYAxisLabels = document.querySelectorAll(
       ".highcharts-yaxis-labels text"
     );
-    for (const label of assetTimeSeriesYAxisLabels) {
-      label.classList.add(MASKING_TARGET_CLASS);
-    }
+    addMaskToAll(assetTimeSeriesYAxisLabels);
   };
 
   const markMaskTargets = () => {
@@ -702,9 +728,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     const currentTargets = document.querySelectorAll(
       `.${MASKING_TARGET_CLASS}`
     );
-    for (const el of currentTargets) {
-      el.classList.remove(MASKING_TARGET_CLASS);
-    }
+    removeMaskFromAll(currentTargets);
   };
 
   const ensureMaskToggleButton = () => {
@@ -768,25 +792,74 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     row.querySelector(memoSelectorPrimary) ??
     row.querySelector(memoSelectorFallback);
 
-  const ensureLabelHeader = () => {
-    const headRow = document.querySelector("#cf-detail-table thead tr");
+  const getHeadRow = () => document.querySelector(SELECTORS.tableHeadRow);
+
+  const createHeadCell = (text, className) => {
+    const th = document.createElement("th");
+    if (className) {
+      th.className = className;
+    }
+    th.textContent = text;
+    return th;
+  };
+
+  const insertAfterNode = (referenceNode, newNode) => {
+    if (!referenceNode?.parentElement) {
+      return false;
+    }
+    referenceNode.parentElement.insertBefore(
+      newNode,
+      referenceNode.nextSibling
+    );
+    return true;
+  };
+
+  const ensureHeaderCells = ({
+    headRow,
+    existingSelector,
+    markerKey,
+    cells,
+    getInsertAfterNode,
+  }) => {
     if (!headRow) {
       return;
     }
-    if (headRow.querySelector(`.${labelHeadClass}`)) {
+    if (existingSelector && headRow.querySelector(existingSelector)) {
       return;
     }
-    const memoHead =
-      headRow.querySelector("th.memo") ??
-      headRow.querySelector('th[data-title="メモ"]');
-    const th = document.createElement("th");
-    th.className = labelHeadClass;
-    th.textContent = "サブスク";
-    if (memoHead?.parentElement) {
-      memoHead.parentElement.insertBefore(th, memoHead.nextSibling);
-    } else {
-      headRow.append(th);
+    if (markerKey && headRow.dataset[markerKey] === "1") {
+      return;
     }
+
+    const nodes = cells.map(({ text, className }) =>
+      createHeadCell(text, className)
+    );
+    const insertAfter = getInsertAfterNode?.(headRow);
+    if (insertAfter) {
+      let current = insertAfter;
+      for (const node of nodes) {
+        insertAfterNode(current, node);
+        current = node;
+      }
+    } else {
+      headRow.append(...nodes);
+    }
+
+    if (markerKey) {
+      headRow.dataset[markerKey] = "1";
+    }
+  };
+
+  const ensureLabelHeader = () => {
+    const headRow = getHeadRow();
+    ensureHeaderCells({
+      headRow,
+      existingSelector: `.${labelHeadClass}`,
+      cells: [{ text: "サブスク", className: labelHeadClass }],
+      getInsertAfterNode: (row) =>
+        row.querySelector(SELECTORS.memoHeadPrimary) ??
+        row.querySelector(SELECTORS.memoHeadFallback),
+    });
   };
 
   const getOrCreateLabelCell = (row) => {
@@ -807,7 +880,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const removeLabelUi = () => {
     const head = document.querySelector(`th.${labelHeadClass}`);
     head?.remove();
-    const rows = document.querySelectorAll("tr.transaction_list");
+    const rows = getTransactionRows();
     for (const row of rows) {
       const cell = row.querySelector(`td.${labelCellClass}`);
       cell?.remove();
@@ -873,22 +946,19 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const ensureSatisfactionHeader = () => {
-    const headRow = document.querySelector("#cf-detail-table thead tr");
-    if (!headRow || headRow.dataset.mfSatHead === "1") {
-      return;
-    }
-    const thRank = document.createElement("th");
-    thRank.className = satisfactionHeadClass;
-    thRank.textContent = "満足度";
-    const thNote = document.createElement("th");
-    thNote.className = satisfactionHeadClass;
-    thNote.textContent = "満足度メモ";
-    headRow.append(thRank, thNote);
-    headRow.dataset.mfSatHead = "1";
+    const headRow = getHeadRow();
+    ensureHeaderCells({
+      headRow,
+      markerKey: "mfSatHead",
+      cells: [
+        { text: "満足度", className: satisfactionHeadClass },
+        { text: "満足度メモ", className: satisfactionHeadClass },
+      ],
+    });
   };
 
   const removeSatisfactionUi = () => {
-    const headRow = document.querySelector("#cf-detail-table thead tr");
+    const headRow = getHeadRow();
     if (headRow && headRow.dataset.mfSatHead === "1") {
       headRow.dataset.mfSatHead = "";
       const heads = headRow.querySelectorAll(`.${satisfactionHeadClass}`);
@@ -896,7 +966,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         th.remove();
       }
     }
-    const rows = document.querySelectorAll("tr.transaction_list");
+    const rows = getTransactionRows();
     for (const row of rows) {
       if (row.dataset.mfSatInjected === "1") {
         row.dataset.mfSatInjected = "";
@@ -980,7 +1050,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       return;
     }
     ensureLabelHeader();
-    const rows = document.querySelectorAll("tr.transaction_list");
+    const rows = getTransactionRows();
     let missingMemo = 0;
     const { labelsByTxId, labelsByStoreAmount } = await loadLabels();
 
@@ -1036,7 +1106,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     ensureSatisfactionHeader();
     const { satisfactionByTxId, satisfactionByStoreDate } =
       await loadSatisfaction();
-    const rows = document.querySelectorAll("tr.transaction_list");
+    const rows = getTransactionRows();
     const handleChange = async ({ txKey, sdKey, select, input }) => {
       const rank = select?.value ?? "";
       const note = input?.value ?? "";
@@ -1084,24 +1154,38 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   }
 
   const listBody =
-    document.querySelector("#cf-detail-table tbody.list_body") ??
-    document.querySelector("#cf-detail-table tbody") ??
+    document.querySelector(SELECTORS.tableBodyPrimary) ??
+    document.querySelector(SELECTORS.tableBodyFallback) ??
     document.body;
   const observer = new MutationObserver(scheduleInit);
   observer.observe(listBody, { childList: true, subtree: true });
 
   // Gemini 解析
   const loadSettings = async () => {
-    const syncRes = await safeStorageGet("sync", "settings", {});
-    if (syncRes?.settings) {
-      return syncRes.settings;
+    if (cachedSettings) {
+      return cachedSettings;
     }
-    const localRes = await safeStorageGet("local", "settings", {});
-    return localRes?.settings ?? {};
+    if (cachedSettingsPromise) {
+      return cachedSettingsPromise;
+    }
+    cachedSettingsPromise = (async () => {
+      const syncRes = await safeStorageGet("sync", "settings", {});
+      if (syncRes?.settings) {
+        return syncRes.settings;
+      }
+      const localRes = await safeStorageGet("local", "settings", {});
+      return localRes?.settings ?? {};
+    })();
+    try {
+      cachedSettings = await cachedSettingsPromise;
+      return cachedSettings;
+    } finally {
+      cachedSettingsPromise = null;
+    }
   };
 
   const _getViewMonth = () => {
-    const rows = document.querySelectorAll("tr.transaction_list");
+    const rows = getTransactionRows();
     for (const row of rows) {
       const parsed = parseDate(row);
       if (parsed?.length >= 7) {
@@ -1231,9 +1315,8 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     card.classList.toggle("mf-sub-indicator--error", isError);
   };
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: DOM収集処理を一括で実行するため許容
   const collectTransactions = () => {
-    const rows = document.querySelectorAll("tr.transaction_list");
+    const rows = getTransactionRows();
     const txList = [];
     for (const row of rows) {
       const txId = findTxId(row);
@@ -1242,27 +1325,23 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       const date = parseDate(row);
       const isIncome = getIsIncome(row);
       const isTarget = getIsTarget(row);
-      const category = row.querySelector(".v_l_ctg")?.textContent?.trim() ?? "";
+      const category =
+        row.querySelector(SELECTORS.categoryLarge)?.textContent?.trim() ?? "";
       const subcategory =
-        row.querySelector(".v_m_ctg")?.textContent?.trim() ?? "";
+        row.querySelector(SELECTORS.categoryMiddle)?.textContent?.trim() ?? "";
       const memo =
-        row.querySelector("td.memo .noform span")?.textContent?.trim() ?? "";
+        row.querySelector(SELECTORS.memoText)?.textContent?.trim() ?? "";
       const paymentSource =
-        row.querySelector("td.note")?.textContent?.trim() ?? "";
+        row.querySelector(SELECTORS.noteText)?.textContent?.trim() ?? "";
+      const isValidAmount = amount !== null && amount !== undefined;
+      if (!(txId && isValidAmount)) {
+        continue;
+      }
+      if (!isTarget || isIncome || !isNegativeAmount(row)) {
+        continue;
+      }
       const labelText = `${category}${subcategory}` || "";
       const excluded = EXCLUDE_KEYWORDS.some((kw) => labelText.includes(kw));
-      if (!txId || amount === null || amount === undefined) {
-        continue;
-      }
-      if (!isTarget) {
-        continue;
-      }
-      if (isIncome) {
-        continue;
-      }
-      if (!isNegativeAmount(row)) {
-        continue;
-      }
       if (excluded) {
         continue;
       }
@@ -1313,7 +1392,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const clearDuplicateHighlight = () => {
-    const rows = document.querySelectorAll("tr.transaction_list");
+    const rows = getTransactionRows();
     for (const row of rows) {
       row.classList.remove(DUPLICATE_CLASS);
       if (row.title === "同日・同内容・同額の取引が複数あります") {
@@ -1323,7 +1402,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const applyDuplicateHighlight = (duplicateTxIds) => {
-    const rows = document.querySelectorAll("tr.transaction_list");
+    const rows = getTransactionRows();
     for (const row of rows) {
       const txId = findTxId(row);
       if (txId && duplicateTxIds.has(txId)) {
@@ -1340,8 +1419,8 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
 
   const clearCategoryAlert = (row) => {
     row.classList.remove(CATEGORY_ALERT_ROW_CLASS);
-    const categoryCell = row.querySelector(".v_l_ctg");
-    const subcategoryCell = row.querySelector(".v_m_ctg");
+    const categoryCell = row.querySelector(SELECTORS.categoryLarge);
+    const subcategoryCell = row.querySelector(SELECTORS.categoryMiddle);
     for (const cell of [categoryCell, subcategoryCell]) {
       cell?.classList.remove(CATEGORY_ALERT_CELL_CLASS);
     }
@@ -1354,16 +1433,17 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     getIsTarget(row) && !getIsIncome(row) && isNegativeAmount(row);
 
   const getCategoryTexts = (row) => {
-    const category = row.querySelector(".v_l_ctg")?.textContent?.trim() ?? "";
+    const category =
+      row.querySelector(SELECTORS.categoryLarge)?.textContent?.trim() ?? "";
     const subcategory =
-      row.querySelector(".v_m_ctg")?.textContent?.trim() ?? "";
+      row.querySelector(SELECTORS.categoryMiddle)?.textContent?.trim() ?? "";
     return { category, subcategory };
   };
 
   const setCategoryAlert = (row, violation) => {
     row.classList.add(CATEGORY_ALERT_ROW_CLASS);
-    const categoryCell = row.querySelector(".v_l_ctg");
-    const subcategoryCell = row.querySelector(".v_m_ctg");
+    const categoryCell = row.querySelector(SELECTORS.categoryLarge);
+    const subcategoryCell = row.querySelector(SELECTORS.categoryMiddle);
     categoryCell?.classList.add(CATEGORY_ALERT_CELL_CLASS);
     subcategoryCell?.classList.add(CATEGORY_ALERT_CELL_CLASS);
     const reasonText =
@@ -1374,7 +1454,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const applyCategoryAlert = (sets) => {
-    const rows = document.querySelectorAll("tr.transaction_list");
+    const rows = getTransactionRows();
     for (const row of rows) {
       if (!shouldCheckCategory(row)) {
         clearCategoryAlert(row);
@@ -1396,7 +1476,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const applyGeminiHighlight = (results, threshold) => {
-    const rows = document.querySelectorAll("tr.transaction_list");
+    const rows = getTransactionRows();
     const scoreMap = new Map();
     if (Array.isArray(results)) {
       for (const item of results) {
@@ -1441,7 +1521,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     const settings = await loadSettings();
     const enabled = settings.featureFlags?.categoryRuleAlertEnabled ?? true;
     if (!enabled) {
-      const rows = document.querySelectorAll("tr.transaction_list");
+      const rows = getTransactionRows();
       for (const row of rows) {
         clearCategoryAlert(row);
       }
@@ -1452,7 +1532,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       (sets.whitelist?.size ?? 0) === 0 &&
       (sets.blacklist?.size ?? 0) === 0
     ) {
-      const rows = document.querySelectorAll("tr.transaction_list");
+      const rows = getTransactionRows();
       for (const row of rows) {
         clearCategoryAlert(row);
       }
@@ -1591,8 +1671,8 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return "ok";
   };
 
-  // 初回実行 & DOM変化時に実行をデバウンス
-  const scheduleRunGemini = (() => {
+  // 初回実行 & DOM変化時に実行をデバウンスする共通ヘルパー
+  const createDebouncedRunner = (fn, delayMs = 200) => {
     let pending = null;
     return () => {
       if (pending) {
@@ -1600,49 +1680,15 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       }
       pending = setTimeout(() => {
         pending = null;
-        runGemini();
-      }, 200);
+        fn();
+      }, delayMs);
     };
-  })();
+  };
 
-  const scheduleDuplicateCheck = (() => {
-    let pending = null;
-    return () => {
-      if (pending) {
-        return;
-      }
-      pending = setTimeout(() => {
-        pending = null;
-        runDuplicateCheck();
-      }, 200);
-    };
-  })();
-
-  const scheduleCategoryCheck = (() => {
-    let pending = null;
-    return () => {
-      if (pending) {
-        return;
-      }
-      pending = setTimeout(() => {
-        pending = null;
-        runCategoryRuleAlert();
-      }, 200);
-    };
-  })();
-
-  const scheduleSatisfaction = (() => {
-    let pending = null;
-    return () => {
-      if (pending) {
-        return;
-      }
-      pending = setTimeout(() => {
-        pending = null;
-        runSatisfaction();
-      }, 200);
-    };
-  })();
+  const scheduleRunGemini = createDebouncedRunner(runGemini);
+  const scheduleDuplicateCheck = createDebouncedRunner(runDuplicateCheck);
+  const scheduleCategoryCheck = createDebouncedRunner(runCategoryRuleAlert);
+  const scheduleSatisfaction = createDebouncedRunner(runSatisfaction);
 
   scheduleInit();
   scheduleSatisfaction();
@@ -1669,6 +1715,8 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const isSettingsArea = (area) => area === "sync" || area === "local";
 
   const handleSettingsChange = () => {
+    cachedSettings = null;
+    cachedSettingsPromise = null;
     clearSessionFlags();
     log("settings changed; session flag cleared (no auto-run)");
     scheduleDuplicateCheck();
@@ -1676,6 +1724,8 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const handleUiPrefsChange = (next) => {
+    cachedUiPrefs = null;
+    cachedUiPrefsPromise = null;
     const nextFeatureEnabled = next?.maskingFeatureEnabled;
     const nextMaskingEnabled = next?.maskingEnabled;
 
@@ -1686,6 +1736,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       maskingEnabled = nextMaskingEnabled;
     }
     maskingPrefsLoaded = true;
+    if (next && typeof next === "object") {
+      cachedUiPrefs = { ...DEFAULT_UI_PREFS, ...next };
+    }
 
     if (!maskingFeatureEnabled) {
       disableMaskingFeature();

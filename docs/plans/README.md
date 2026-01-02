@@ -1,10 +1,2 @@
 # plans ドキュメント
 
-- `mf_subs_design_outline.md` : マネーフォワードME向け拡張の設計準備メモ。要件 v1 を踏まえたアーキテクチャ・データモデル・処理フローの初期案。
-- `mf_subs_design_detail.md` : 要件定義書に準拠した詳細設計（データモデル、メッセージ仕様、UI挙動、エラーハンドリング、テスト観点）。
-- `mf_options_wireframe.md` : オプション画面のUIワイヤーフレームと文言・状態遷移の定義。
-- `duplicate_check_design.md` : 二重計上チェック機能の詳細設計と実装タスク一覧。
-- `mf_downloader_context_menu_design.md` : 家計簿CSVを右クリックメニューからダウンロードする機能の移植設計メモとタスク草案。
-- `budget_category_rules_design.md` : 大項目×中項目の組み合わせ警告表示の詳細設計と実装タスク。
-- `satisfaction_columns_design.md` : 家計簿テーブルに満足度/メモ列を追加するための設計メモ（Top/Worst3 選択と理由メモ、保存スキーマ、タスク草案）。
-- `masking_design.md` : 画面共有・スクショ対策として「内容」「金額（円）」をぼかすマスキング機能の設計メモ（ワンクリック切替と永続化）。
