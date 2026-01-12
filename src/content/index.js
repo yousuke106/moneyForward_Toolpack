@@ -85,6 +85,13 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const LARGE_CATEGORY_ITEM_CLASS = "mf-lc-dnd-item";
   const LARGE_CATEGORY_SORTING_ACTIVE_CLASS = "mf-lc-dnd-active";
   const LARGE_CATEGORY_EXCLUDED_IDS = new Set(["0"]);
+  const CF_LARGE_CATEGORY_TRIGGER_SELECTOR =
+    '.btn-group.btn_l_ctg a.v_l_ctg[data-toggle="dropdown"]';
+  const CF_LARGE_CATEGORY_MENU_SELECTOR = "ul.dropdown-menu.main_menu.minus";
+  const CF_LARGE_CATEGORY_ITEM_SELECTOR = "li.dropdown-submenu";
+  const CF_LARGE_CATEGORY_ANCHOR_SELECTOR = "a.l_c_name[id]";
+  const CF_LARGE_CATEGORY_SORTED_KEY = "mfLargeCategoryMenuSorted";
+  const CF_LARGE_CATEGORY_MENU_PENDING_CLASS = "mf-lc-menu-pending";
   const MASKING_ROOT_CLASS = "mf-tp-mask-on";
   const MASKING_TARGET_CLASS = "mf-tp-mask-target";
   const MASKING_TOGGLE_ID = "mf-tp-mask-toggle";
@@ -1171,6 +1178,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const isProfileRulePage = () => location.pathname === "/profile/rule";
+  const isCfPage = () => location.pathname.startsWith("/cf");
 
   const getLargeCategoryItems = (nav) =>
     Array.from(nav?.children ?? []).filter((child) =>
@@ -1452,6 +1460,102 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     if (!usingJquery) {
       enableNativeSortable(nav);
     }
+  };
+
+  const getCfLargeCategoryItems = (menu) =>
+    Array.from(menu?.children ?? []).filter((child) =>
+      child?.matches?.(CF_LARGE_CATEGORY_ITEM_SELECTOR)
+    );
+
+  const getCfLargeCategoryIds = (menu) => {
+    const ids = [];
+    for (const item of getCfLargeCategoryItems(menu)) {
+      const id = item
+        .querySelector(CF_LARGE_CATEGORY_ANCHOR_SELECTOR)
+        ?.getAttribute("id")
+        ?.trim();
+      if (id && !LARGE_CATEGORY_EXCLUDED_IDS.has(id)) {
+        ids.push(id);
+      }
+    }
+    return ids;
+  };
+
+  const applyCfLargeCategoryOrder = (menu, orderedIds) => {
+    const orderSet = new Set(orderedIds);
+    const items = getCfLargeCategoryItems(menu);
+    const byId = new Map();
+    const rest = [];
+    for (const item of items) {
+      const id = item
+        .querySelector(CF_LARGE_CATEGORY_ANCHOR_SELECTOR)
+        ?.getAttribute("id")
+        ?.trim();
+      if (id && orderSet.has(id)) {
+        byId.set(id, item);
+      } else {
+        rest.push(item);
+      }
+    }
+    const fragment = document.createDocumentFragment();
+    for (const id of orderedIds) {
+      const item = byId.get(id);
+      if (item) {
+        fragment.appendChild(item);
+      }
+    }
+    for (const item of rest) {
+      fragment.appendChild(item);
+    }
+    menu.appendChild(fragment);
+  };
+
+  const initializeCfLargeCategoryOrdering = async () => {
+    if (!isCfPage()) {
+      return;
+    }
+    const menu = document.querySelector(CF_LARGE_CATEGORY_MENU_SELECTOR);
+    if (!menu) {
+      document.documentElement.classList.remove(
+        CF_LARGE_CATEGORY_MENU_PENDING_CLASS
+      );
+      return;
+    }
+    const settings = await loadSettings();
+    const enabled = settings?.[LARGE_CATEGORY_SORTING_ENABLED_KEY] ?? true;
+    if (!enabled) {
+      document.documentElement.classList.remove(
+        CF_LARGE_CATEGORY_MENU_PENDING_CLASS
+      );
+      return;
+    }
+    const currentIds = getCfLargeCategoryIds(menu);
+    if (!currentIds.length) {
+      document.documentElement.classList.remove(
+        CF_LARGE_CATEGORY_MENU_PENDING_CLASS
+      );
+      return;
+    }
+    const savedOrder = settings?.[LARGE_CATEGORY_SORTING_KEY]?.order ?? [];
+    if (!savedOrder.length) {
+      document.documentElement.classList.remove(
+        CF_LARGE_CATEGORY_MENU_PENDING_CLASS
+      );
+      return;
+    }
+    const normalized = normalizeLargeCategoryOrder(currentIds, savedOrder);
+    const nextKey = normalized.join(",");
+    if (menu.dataset[CF_LARGE_CATEGORY_SORTED_KEY] === nextKey) {
+      document.documentElement.classList.remove(
+        CF_LARGE_CATEGORY_MENU_PENDING_CLASS
+      );
+      return;
+    }
+    applyCfLargeCategoryOrder(menu, normalized);
+    menu.dataset[CF_LARGE_CATEGORY_SORTED_KEY] = nextKey;
+    document.documentElement.classList.remove(
+      CF_LARGE_CATEGORY_MENU_PENDING_CLASS
+    );
   };
 
   const _getViewMonth = () => {
@@ -1979,6 +2083,10 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     () => initializeLargeCategorySorting(),
     120
   );
+  const scheduleCfLargeCategoryOrdering = createDebouncedRunner(
+    () => initializeCfLargeCategoryOrdering(),
+    120
+  );
 
   const scheduleRunGemini = createDebouncedRunner(runGemini);
   const scheduleDuplicateCheck = createDebouncedRunner(runDuplicateCheck);
@@ -2000,6 +2108,26 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       childList: true,
       subtree: true,
     });
+  }
+
+  if (isCfPage()) {
+    scheduleCfLargeCategoryOrdering();
+    document.addEventListener("click", (event) => {
+      const trigger = event.target?.closest?.(
+        CF_LARGE_CATEGORY_TRIGGER_SELECTOR
+      );
+      if (!trigger) {
+        return;
+      }
+      document.documentElement.classList.add(
+        CF_LARGE_CATEGORY_MENU_PENDING_CLASS
+      );
+      scheduleCfLargeCategoryOrdering();
+    });
+    const cfMenuObserver = new MutationObserver(() =>
+      scheduleCfLargeCategoryOrdering()
+    );
+    cfMenuObserver.observe(document.body, { childList: true, subtree: true });
   }
 
   const geminiObserver = new MutationObserver(() => scheduleRunGemini());
@@ -2029,6 +2157,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     scheduleCategoryCheck();
     if (isProfileRulePage()) {
       scheduleLargeCategorySorting();
+    }
+    if (isCfPage()) {
+      scheduleCfLargeCategoryOrdering();
     }
   };
 

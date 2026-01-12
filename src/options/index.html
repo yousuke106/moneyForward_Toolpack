@@ -231,6 +231,69 @@
       </section>
 
       <section class="card">
+        <h2>カテゴリの並び順</h2>
+        <div class="field">
+          <div class="row-inline between">
+            <div>
+              <div class="field-title">並び替えを有効にする</div>
+              <div class="note">
+                OFF
+                でも保存済みの並び順は保持され、家計簿（/cf）は既定順で表示されます。
+              </div>
+            </div>
+            <label class="switch">
+              <input
+                id="largeCategoryOrderToggle"
+                type="checkbox"
+                aria-label="カテゴリ並び替えの有効/無効"
+              >
+              <span class="slider" aria-hidden="true"></span>
+            </label>
+          </div>
+        </div>
+        <div class="field row-inline between">
+          <div class="note">
+            リセットすると保存済みの並び順データが削除され、既定の順序に戻ります。
+          </div>
+          <button id="largeCategoryOrderResetBtn" type="button" class="ghost">
+            大項目の並び順をリセット
+          </button>
+        </div>
+        <div
+          id="largeCategoryOrderResetConfirm"
+          class="confirm hidden"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="largeCategoryOrderResetTitle"
+        >
+          <div class="confirm-content">
+            <div id="largeCategoryOrderResetTitle" class="confirm-title">
+              並び順をリセットしますか？
+            </div>
+            <div class="note">
+              保存済みの並び順データが削除され、既定の順序で表示されます。
+            </div>
+            <div class="row-inline gap">
+              <button
+                id="largeCategoryOrderResetCancel"
+                type="button"
+                class="ghost"
+              >
+                キャンセル
+              </button>
+              <button
+                id="largeCategoryOrderResetConfirmBtn"
+                type="button"
+                class="danger"
+              >
+                リセットする
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
         <h2>カテゴリルール</h2>
         <div class="field">
           <div class="row-inline between">

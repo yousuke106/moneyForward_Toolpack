@@ -171,23 +171,23 @@
 3.2. [x] ドラッグハンドル要素を追加し、クリックによるメニュー開閉と干渉させない
 3.3. [x] ドロップ完了時に `order: string[]` を再構築して保存
 3.4. [x] 品質チェック: `npm exec -- ultracite check`
-4. [ ] `/cf` 側の並び替え適用
-4.1. [ ] `ul.dropdown-menu.main_menu.minus` を対象に `order` を適用
-4.2. [ ] 未分類 `id=0` は対象外で固定
-4.3. [ ] クリック起点 + DOM出現検知で一度だけ適用（Observer + デバウンス）
-4.4. [ ] 品質チェック: `npm exec -- ultracite check`
-5. [ ] オプション画面に「並び替え ON/OFF」トグルを追加
-5.1. [ ] 既定値 `settings.largeCategoryOrderEnabled = true` を反映
-5.2. [ ] OFF の場合は並び替え処理・ドラッグ UI を無効化または非表示
-5.3. [ ] 品質チェック: `npm exec -- ultracite check`
-6. [ ] オプション画面に「大項目の並び順をリセット」ボタンを追加
-6.1. [ ] `settings.largeCategoryOrder` が未設定なら disabled
-6.2. [ ] 確認ダイアログ後に削除保存 + ステータスメッセージ表示
-6.3. [ ] 品質チェック: `npm exec -- ultracite check`
+4. [x] `/cf` 側の並び替え適用
+4.1. [x] `ul.dropdown-menu.main_menu.minus` を対象に `order` を適用
+4.2. [x] 未分類 `id=0` は対象外で固定
+4.3. [x] クリック起点 + DOM出現検知で一度だけ適用（Observer + デバウンス）
+4.4. [x] 品質チェック: `npm exec -- ultracite check`
+5. [x] オプション画面に「並び替え ON/OFF」トグルを追加
+5.1. [x] 既定値 `settings.largeCategoryOrderEnabled = true` を反映
+5.2. [x] OFF の場合は並び替え処理・ドラッグ UI を無効化または非表示
+5.3. [x] 品質チェック: `npm exec -- ultracite check`
+6. [x] オプション画面に「大項目の並び順をリセット」ボタンを追加
+6.1. [x] `settings.largeCategoryOrder` が未設定なら disabled
+6.2. [x] 確認ダイアログ後に削除保存 + ステータスメッセージ表示
+6.3. [x] 品質チェック: `npm exec -- ultracite check`
 7. [x] スタイル追加（ハンドルや並び替え中の視覚フィードバック）
 7.1. [x] 品質チェック: `npm exec -- ultracite check`
-8. [ ] サンプルHTML（fixture）を使った軽量テスト（DOM操作が期待どおりになるか）
-8.1. [ ] 品質チェック: `npm exec -- ultracite check`
+8. [x] サンプルHTML（fixture）を使った軽量テスト（DOM操作が期待どおりになるか）
+8.1. [x] 品質チェック: `npm exec -- ultracite check`
 
 ## 受け入れ条件（たたき台）
 - 設定画面で大項目の並び順を変更でき、リロード後も保持される。

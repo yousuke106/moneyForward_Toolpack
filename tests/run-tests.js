@@ -5,6 +5,7 @@ import { runCategoryRuleTests } from "./unit/category-rules.test.js";
 import { runStorageSettingsTests } from "./unit/storage-settings.test.js";
 import { runUiPrefsTests } from "./unit/ui-prefs.test.js";
 import { runHeaderUtilsTests } from "./unit/header-utils.test.js";
+import { runLargeCategoryOrderTests } from "./unit/large-category-order.test.js";
 
 const main = async () => {
   await runDataTests();
@@ -12,6 +13,7 @@ const main = async () => {
   runDownloaderTests();
   runCategoryRuleTests();
   runHeaderUtilsTests();
+  runLargeCategoryOrderTests();
   await runStorageSettingsTests();
   await runUiPrefsTests();
   // eslint-disable-next-line no-console

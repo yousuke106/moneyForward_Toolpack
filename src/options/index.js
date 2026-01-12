@@ -30,6 +30,21 @@ const subscriptionLabelToggle = document.getElementById(
   "subscriptionLabelToggle"
 );
 const maskingToggle = document.getElementById("maskingToggle");
+const largeCategoryOrderToggle = document.getElementById(
+  "largeCategoryOrderToggle"
+);
+const largeCategoryOrderResetBtn = document.getElementById(
+  "largeCategoryOrderResetBtn"
+);
+const largeCategoryOrderResetConfirm = document.getElementById(
+  "largeCategoryOrderResetConfirm"
+);
+const largeCategoryOrderResetCancel = document.getElementById(
+  "largeCategoryOrderResetCancel"
+);
+const largeCategoryOrderResetConfirmBtn = document.getElementById(
+  "largeCategoryOrderResetConfirmBtn"
+);
 const categoryTabWhitelist = document.getElementById("categoryTabWhitelist");
 const categoryTabBlacklist = document.getElementById("categoryTabBlacklist");
 const categoryList = document.getElementById("categoryList");
@@ -196,6 +211,10 @@ const applyFeatureToggles = (settings) => {
   if (subscriptionLabelToggle) {
     subscriptionLabelToggle.checked = subscriptionLabelEnabled;
   }
+  if (largeCategoryOrderToggle) {
+    largeCategoryOrderToggle.checked =
+      settings.largeCategoryOrderEnabled ?? true;
+  }
 };
 
 const applyUiPrefs = (prefs) => {
@@ -221,6 +240,7 @@ const buildSettingsSnapshot = ({
   categoryEnabled,
   satisfactionEnabled,
   subscriptionLabelEnabled,
+  largeCategoryOrderEnabled,
   loadedSettings = {},
 }) => {
   const apiKeyFallback = loadedSettings.geminiApiKey ?? "";
@@ -241,6 +261,10 @@ const buildSettingsSnapshot = ({
     whitelist: categoryRules.whitelist ?? [],
     blacklist: categoryRules.blacklist ?? [],
   };
+  const resolvedLargeCategoryOrderEnabled =
+    typeof largeCategoryOrderEnabled === "boolean"
+      ? largeCategoryOrderEnabled
+      : (loadedSettings.largeCategoryOrderEnabled ?? true);
 
   return {
     geminiApiKey: apiKeyInput.value.trim() || apiKeyFallback,
@@ -255,7 +279,22 @@ const buildSettingsSnapshot = ({
       subscriptionLabelEnabled,
     },
     categoryRules: resolvedCategoryRules,
+    largeCategoryOrder: loadedSettings.largeCategoryOrder ?? null,
+    largeCategoryOrderEnabled: resolvedLargeCategoryOrderEnabled,
   };
+};
+
+const applyLargeCategoryOrderUi = (settings) => {
+  if (largeCategoryOrderToggle) {
+    largeCategoryOrderToggle.checked =
+      settings.largeCategoryOrderEnabled ?? true;
+  }
+  if (largeCategoryOrderResetBtn) {
+    largeCategoryOrderResetBtn.disabled = !settings.largeCategoryOrder;
+  }
+  if (largeCategoryOrderResetConfirm) {
+    largeCategoryOrderResetConfirm.classList.add("hidden");
+  }
 };
 
 const setCategoryError = (message) => {
@@ -595,6 +634,7 @@ const applySettingsToUi = (settings, area) => {
   }
   applyFeatureToggles(settings);
   applyCategoryRules(settings);
+  applyLargeCategoryOrderUi(settings);
   renderStatus(`ロード元: ${area === "sync" ? "sync" : "local"}`);
 };
 
@@ -623,6 +663,15 @@ const load = async () => {
     if (subscriptionLabelToggle) {
       subscriptionLabelToggle.checked = true;
     }
+    if (largeCategoryOrderToggle) {
+      largeCategoryOrderToggle.checked = true;
+    }
+    if (largeCategoryOrderResetBtn) {
+      largeCategoryOrderResetBtn.disabled = true;
+    }
+    if (largeCategoryOrderResetConfirm) {
+      largeCategoryOrderResetConfirm.classList.add("hidden");
+    }
     renderCategoryTab(currentCategoryTab);
     renderStatus("未保存です。設定を入力してください。");
     validate();
@@ -635,9 +684,6 @@ const load = async () => {
 const onSave = async () => {
   const {
     valid,
-    apiKey,
-    threshold,
-    model,
     geminiEnabled,
     duplicateEnabled,
     downloaderEnabled,
@@ -648,21 +694,17 @@ const onSave = async () => {
   if (!valid) {
     return;
   }
-
-  const settings = {
-    geminiApiKey: apiKey,
-    scoreThreshold: threshold,
-    model,
-    featureFlags: {
-      geminiAnalysisEnabled: geminiEnabled,
-      duplicateCheckEnabled: duplicateEnabled,
-      downloaderContextMenuEnabled: downloaderEnabled,
-      categoryRuleAlertEnabled: categoryEnabled,
-      satisfactionEnabled,
-      subscriptionLabelEnabled,
-    },
-    categoryRules,
-  };
+  const loaded = await loadSettings();
+  const settings = buildSettingsSnapshot({
+    geminiEnabled,
+    duplicateEnabled,
+    downloaderEnabled,
+    categoryEnabled,
+    satisfactionEnabled,
+    subscriptionLabelEnabled,
+    largeCategoryOrderEnabled: largeCategoryOrderToggle?.checked ?? true,
+    loadedSettings: loaded?.settings ?? {},
+  });
   const result = await saveSettingsWithFallback(settings);
   const areaLabel = result.area === "sync" ? "sync" : "local";
   let reason = "";
@@ -726,6 +768,7 @@ if (geminiToggle) {
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
+      largeCategoryOrderEnabled: largeCategoryOrderToggle?.checked ?? true,
     }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
@@ -751,6 +794,7 @@ if (duplicateToggle) {
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
+      largeCategoryOrderEnabled: largeCategoryOrderToggle?.checked ?? true,
     }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
@@ -767,6 +811,7 @@ if (downloaderToggle) {
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
+      largeCategoryOrderEnabled: largeCategoryOrderToggle?.checked ?? true,
     }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
@@ -783,6 +828,7 @@ if (categoryToggle) {
       categoryEnabled: categoryToggle.checked,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
+      largeCategoryOrderEnabled: largeCategoryOrderToggle?.checked ?? true,
     }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
@@ -799,6 +845,7 @@ if (satisfactionToggle) {
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle.checked,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
+      largeCategoryOrderEnabled: largeCategoryOrderToggle?.checked ?? true,
     }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
@@ -815,9 +862,80 @@ if (subscriptionLabelToggle) {
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle.checked,
+      largeCategoryOrderEnabled: largeCategoryOrderToggle?.checked ?? true,
     }).catch((error) =>
       renderStatus(`保存に失敗しました: ${error.message}`, true)
     );
+  });
+}
+
+if (largeCategoryOrderToggle) {
+  largeCategoryOrderToggle.addEventListener("change", () => {
+    saveFeatureToggle({
+      geminiEnabled: geminiToggle?.checked ?? true,
+      duplicateEnabled: duplicateToggle?.checked ?? true,
+      downloaderEnabled: downloaderToggle?.checked ?? true,
+      categoryEnabled: categoryToggle?.checked ?? true,
+      satisfactionEnabled: satisfactionToggle?.checked ?? true,
+      subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
+      largeCategoryOrderEnabled: largeCategoryOrderToggle.checked,
+    }).catch((error) =>
+      renderStatus(`保存に失敗しました: ${error.message}`, true)
+    );
+  });
+}
+
+const runLargeCategoryOrderReset = async () => {
+  try {
+    const loaded = await loadSettings();
+    const snapshot = buildSettingsSnapshot({
+      geminiEnabled: geminiToggle?.checked ?? true,
+      duplicateEnabled: duplicateToggle?.checked ?? true,
+      downloaderEnabled: downloaderToggle?.checked ?? true,
+      categoryEnabled: categoryToggle?.checked ?? true,
+      satisfactionEnabled: satisfactionToggle?.checked ?? true,
+      subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
+      largeCategoryOrderEnabled: largeCategoryOrderToggle?.checked ?? true,
+      loadedSettings: {
+        ...(loaded?.settings ?? {}),
+        largeCategoryOrder: null,
+      },
+    });
+    const result = await saveSettingsWithFallback(snapshot);
+    const areaLabel = result.area === "sync" ? "sync" : "local";
+    let reason = "";
+    if (result.reason === "sync_threshold") {
+      reason = "（sync容量超過のためローカル保存）";
+    } else if (result.reason === "sync_error") {
+      reason = "（sync書き込みエラーのためローカル保存）";
+    }
+    if (largeCategoryOrderResetBtn) {
+      largeCategoryOrderResetBtn.disabled = true;
+    }
+    if (largeCategoryOrderResetConfirm) {
+      largeCategoryOrderResetConfirm.classList.add("hidden");
+    }
+    renderStatus(`並び順をリセットしました: ${areaLabel}${reason}`);
+  } catch (error) {
+    renderStatus(`リセットに失敗しました: ${error.message}`, true);
+  }
+};
+
+if (largeCategoryOrderResetBtn) {
+  largeCategoryOrderResetBtn.addEventListener("click", () => {
+    largeCategoryOrderResetConfirm?.classList.toggle("hidden");
+  });
+}
+
+if (largeCategoryOrderResetCancel) {
+  largeCategoryOrderResetCancel.addEventListener("click", () => {
+    largeCategoryOrderResetConfirm?.classList.add("hidden");
+  });
+}
+
+if (largeCategoryOrderResetConfirmBtn) {
+  largeCategoryOrderResetConfirmBtn.addEventListener("click", () => {
+    runLargeCategoryOrderReset();
   });
 }
 
@@ -828,6 +946,7 @@ const saveFeatureToggle = async ({
   categoryEnabled,
   satisfactionEnabled,
   subscriptionLabelEnabled,
+  largeCategoryOrderEnabled,
 }) => {
   const loaded = await loadSettings();
   const snapshot = buildSettingsSnapshot({
@@ -837,6 +956,7 @@ const saveFeatureToggle = async ({
     categoryEnabled,
     satisfactionEnabled,
     subscriptionLabelEnabled,
+    largeCategoryOrderEnabled,
     loadedSettings: loaded?.settings ?? {},
   });
   const result = await saveSettingsWithFallback(snapshot);

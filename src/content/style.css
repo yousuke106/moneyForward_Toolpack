@@ -240,6 +240,10 @@
   user-select: none;
 }
 
+.mf-lc-menu-pending .dropdown-menu.main_menu.minus {
+  visibility: hidden;
+}
+
 .mf-lc-dnd-handle:active {
   cursor: grabbing;
 }
