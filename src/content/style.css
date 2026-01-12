@@ -200,6 +200,62 @@
   }
 }
 
+.mf-lc-dnd-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  padding: 0;
+  border: 1px solid #d0d0d0;
+  border-radius: 3px;
+  background: #f7f7f7;
+  color: #666;
+  cursor: grab;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.mf-lc-dnd-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mf-lc-dnd-item > a.dropdown-toggle {
+  flex: 1;
+}
+
+.mf-lc-dnd-active .sub_menu,
+.mf-lc-dnd-dragging .sub_menu {
+  display: none !important;
+}
+
+.mf-lc-dnd-active a.dropdown-toggle {
+  pointer-events: none;
+}
+
+.mf-lc-dnd-active {
+  user-select: none;
+}
+
+.mf-lc-dnd-handle:active {
+  cursor: grabbing;
+}
+
+.mf-lc-dnd-dragging {
+  opacity: 0.7;
+  background: rgba(255, 247, 179, 0.7);
+}
+
+.mf-lc-dnd-placeholder {
+  border: 1px dashed #9c9c9c;
+  background: rgba(0, 0, 0, 0.05);
+  height: 28px;
+  margin: 4px 0;
+}
+
 /* Screen masking (blur): 画面共有/スクショ対策として内容・金額（円）をぼかす */
 .mf-tp-mask-on .mf-tp-mask-target {
   filter: blur(8px);

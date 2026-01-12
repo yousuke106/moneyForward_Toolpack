@@ -162,15 +162,15 @@
 - `npm exec -- ultracite check` を CI 相当として通す。
 
 ## 実装タスクリスト（実装段階）
-1. [ ] `manifest.json` に `/profile/rule` を `content_scripts.matches` として追加する（設定画面に content script を注入）
-1.1. [ ] 品質チェック: `npm exec -- ultracite check`
-2. [ ] `settings.largeCategoryOrder` の型/保存方針を `src/data/storage.js` に反映（ロード/保存のスキーマ拡張）
-2.1. [ ] 品質チェック: `npm exec -- ultracite check`
-3. [ ] 設定画面（`/profile/rule`）の D&D 実装
-3.1. [ ] `ul.nav > li.dropdown-submenu` をドラッグ対象にする
-3.2. [ ] ドラッグハンドル要素を追加し、クリックによるメニュー開閉と干渉させない
-3.3. [ ] ドロップ完了時に `order: string[]` を再構築して保存
-3.4. [ ] 品質チェック: `npm exec -- ultracite check`
+1. [x] `manifest.json` に `/profile/rule` を `content_scripts.matches` として追加する（設定画面に content script を注入）
+1.1. [x] 品質チェック: `npm exec -- ultracite check`
+2. [x] `settings.largeCategoryOrder` の型/保存方針を `src/data/storage.js` に反映（ロード/保存のスキーマ拡張）
+2.1. [x] 品質チェック: `npm exec -- ultracite check`
+3. [x] 設定画面（`/profile/rule`）の D&D 実装
+3.1. [x] `ul.nav > li.dropdown-submenu` をドラッグ対象にする
+3.2. [x] ドラッグハンドル要素を追加し、クリックによるメニュー開閉と干渉させない
+3.3. [x] ドロップ完了時に `order: string[]` を再構築して保存
+3.4. [x] 品質チェック: `npm exec -- ultracite check`
 4. [ ] `/cf` 側の並び替え適用
 4.1. [ ] `ul.dropdown-menu.main_menu.minus` を対象に `order` を適用
 4.2. [ ] 未分類 `id=0` は対象外で固定
@@ -184,8 +184,8 @@
 6.1. [ ] `settings.largeCategoryOrder` が未設定なら disabled
 6.2. [ ] 確認ダイアログ後に削除保存 + ステータスメッセージ表示
 6.3. [ ] 品質チェック: `npm exec -- ultracite check`
-7. [ ] スタイル追加（ハンドルや並び替え中の視覚フィードバック）
-7.1. [ ] 品質チェック: `npm exec -- ultracite check`
+7. [x] スタイル追加（ハンドルや並び替え中の視覚フィードバック）
+7.1. [x] 品質チェック: `npm exec -- ultracite check`
 8. [ ] サンプルHTML（fixture）を使った軽量テスト（DOM操作が期待どおりになるか）
 8.1. [ ] 品質チェック: `npm exec -- ultracite check`
 

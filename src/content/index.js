@@ -72,6 +72,19 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     maskingFeatureEnabled: true,
     maskingEnabled: true,
   };
+  const LARGE_CATEGORY_ORDER_VERSION = 1;
+  const LARGE_CATEGORY_SORTING_KEY = "largeCategoryOrder";
+  const LARGE_CATEGORY_SORTING_ENABLED_KEY = "largeCategoryOrderEnabled";
+  const LARGE_CATEGORY_NAV_SELECTOR = "ul.nav";
+  const LARGE_CATEGORY_ITEM_SELECTOR = "li.dropdown-submenu";
+  const LARGE_CATEGORY_ANCHOR_SELECTOR = "a.dropdown-toggle[id]";
+  const LARGE_CATEGORY_HANDLE_CLASS = "mf-lc-dnd-handle";
+  const LARGE_CATEGORY_DRAGGING_CLASS = "mf-lc-dnd-dragging";
+  const LARGE_CATEGORY_PLACEHOLDER_CLASS = "mf-lc-dnd-placeholder";
+  const LARGE_CATEGORY_SORTABLE_FLAG = "mfLargeCategorySortable";
+  const LARGE_CATEGORY_ITEM_CLASS = "mf-lc-dnd-item";
+  const LARGE_CATEGORY_SORTING_ACTIVE_CLASS = "mf-lc-dnd-active";
+  const LARGE_CATEGORY_EXCLUDED_IDS = new Set(["0"]);
   const MASKING_ROOT_CLASS = "mf-tp-mask-on";
   const MASKING_TARGET_CLASS = "mf-tp-mask-target";
   const MASKING_TOGGLE_ID = "mf-tp-mask-toggle";
@@ -246,6 +259,48 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         store.set(payload, resolve);
       } catch (_error) {
         resolve();
+      }
+    });
+
+  const setStorageWithError = (area, payload) =>
+    new Promise((resolve, reject) => {
+      const store = chrome?.storage?.[area];
+      if (!(chrome?.runtime?.id && store)) {
+        reject(new Error("chrome.storage is unavailable in this context"));
+        return;
+      }
+      try {
+        store.set(payload, () => {
+          const error = chrome?.runtime?.lastError;
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+  const getSyncBytesInUse = () =>
+    new Promise((resolve, reject) => {
+      const store = chrome?.storage?.sync;
+      if (!(chrome?.runtime?.id && store?.getBytesInUse)) {
+        resolve(0);
+        return;
+      }
+      try {
+        store.getBytesInUse(null, (bytes) => {
+          const error = chrome?.runtime?.lastError;
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(bytes ?? 0);
+        });
+      } catch (error) {
+        reject(error);
       }
     });
 
@@ -1097,6 +1152,308 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // options画面と同じ保存先判定（sync容量チェック）で設定を保存する。
+  const saveSettingsWithFallback = async (nextSettings) => {
+    const SYNC_THRESHOLD_BYTES = 90 * 1024;
+    const SYNC_TOTAL_LIMIT_BYTES = 100 * 1024;
+    const bytes = await getSyncBytesInUse().catch(() => SYNC_TOTAL_LIMIT_BYTES);
+    if (bytes >= SYNC_THRESHOLD_BYTES) {
+      await setStorageWithError("local", { settings: nextSettings });
+      return { area: "local", reason: "sync_threshold" };
+    }
+    try {
+      await setStorageWithError("sync", { settings: nextSettings });
+      return { area: "sync" };
+    } catch (error) {
+      await setStorageWithError("local", { settings: nextSettings });
+      return { area: "local", reason: "sync_error", error };
+    }
+  };
+
+  const isProfileRulePage = () => location.pathname === "/profile/rule";
+
+  const getLargeCategoryItems = (nav) =>
+    Array.from(nav?.children ?? []).filter((child) =>
+      child?.matches?.(LARGE_CATEGORY_ITEM_SELECTOR)
+    );
+
+  const getLargeCategoryIds = (nav) => {
+    const ids = [];
+    for (const item of getLargeCategoryItems(nav)) {
+      const id = item
+        .querySelector(LARGE_CATEGORY_ANCHOR_SELECTOR)
+        ?.getAttribute("id")
+        ?.trim();
+      if (id && !LARGE_CATEGORY_EXCLUDED_IDS.has(id)) {
+        ids.push(id);
+      }
+    }
+    return ids;
+  };
+
+  const normalizeLargeCategoryOrder = (currentIds, savedOrder = []) => {
+    const currentSet = new Set(currentIds);
+    const seen = new Set();
+    const normalized = [];
+    for (const id of savedOrder) {
+      if (!currentSet.has(id) || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      normalized.push(id);
+    }
+    for (const id of currentIds) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        normalized.push(id);
+      }
+    }
+    return normalized;
+  };
+
+  const isSameOrder = (left, right) => {
+    if (left.length !== right.length) {
+      return false;
+    }
+    for (let i = 0; i < left.length; i += 1) {
+      if (left[i] !== right[i]) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const applyLargeCategoryOrder = (nav, orderedIds) => {
+    const orderSet = new Set(orderedIds);
+    const items = getLargeCategoryItems(nav);
+    const byId = new Map();
+    const rest = [];
+    for (const item of items) {
+      const id = item
+        .querySelector(LARGE_CATEGORY_ANCHOR_SELECTOR)
+        ?.getAttribute("id")
+        ?.trim();
+      if (id && orderSet.has(id)) {
+        byId.set(id, item);
+      } else {
+        rest.push(item);
+      }
+    }
+    const fragment = document.createDocumentFragment();
+    for (const id of orderedIds) {
+      const item = byId.get(id);
+      if (item) {
+        fragment.appendChild(item);
+      }
+    }
+    for (const item of rest) {
+      fragment.appendChild(item);
+    }
+    nav.appendChild(fragment);
+  };
+
+  const ensureLargeCategoryHandles = (nav, _enableNativeDrag) => {
+    for (const item of getLargeCategoryItems(nav)) {
+      if (item.querySelector(`.${LARGE_CATEGORY_HANDLE_CLASS}`)) {
+        continue;
+      }
+      item.classList.add(LARGE_CATEGORY_ITEM_CLASS);
+      const handle = document.createElement("button");
+      handle.type = "button";
+      handle.className = LARGE_CATEGORY_HANDLE_CLASS;
+      handle.textContent = "≡";
+      handle.setAttribute("aria-label", "並び替えハンドル");
+      handle.setAttribute("title", "ドラッグして並び替え");
+      handle.addEventListener("click", (event) => {
+        event.stopPropagation();
+      });
+      const anchor = item.querySelector(LARGE_CATEGORY_ANCHOR_SELECTOR);
+      if (anchor?.parentNode) {
+        anchor.parentNode.insertBefore(handle, anchor);
+      } else {
+        item.insertBefore(handle, item.firstChild);
+      }
+    }
+  };
+
+  const removeLargeCategoryHandles = (nav) => {
+    const handles = nav.querySelectorAll(`.${LARGE_CATEGORY_HANDLE_CLASS}`);
+    for (const handle of handles) {
+      handle.remove();
+    }
+    const items = nav.querySelectorAll(`.${LARGE_CATEGORY_ITEM_CLASS}`);
+    for (const item of items) {
+      item.classList.remove(LARGE_CATEGORY_ITEM_CLASS);
+    }
+  };
+
+  const persistLargeCategoryOrderFromNav = async (nav) => {
+    const order = getLargeCategoryIds(nav);
+    if (!order.length) {
+      return { order: [] };
+    }
+    try {
+      const settings = await loadSettings();
+      const nextSettings = {
+        ...settings,
+        [LARGE_CATEGORY_SORTING_KEY]: {
+          version: LARGE_CATEGORY_ORDER_VERSION,
+          updatedAt: new Date().toISOString(),
+          order,
+        },
+      };
+      await saveSettingsWithFallback(nextSettings);
+      cachedSettings = nextSettings;
+    } catch (error) {
+      log("large category order save failed", error);
+    }
+    return { order };
+  };
+
+  // 既存の jQuery UI を使える場合はそれを優先し、無ければネイティブ D&D に切り替える。
+  const enableJquerySortable = (nav) => {
+    const $ = globalThis.jQuery;
+    if (typeof $?.fn?.sortable !== "function") {
+      return false;
+    }
+    if (nav.dataset[LARGE_CATEGORY_SORTABLE_FLAG] === "jquery") {
+      try {
+        $(nav).sortable("enable");
+      } catch (_error) {
+        // ignore
+      }
+      return true;
+    }
+    nav.dataset[LARGE_CATEGORY_SORTABLE_FLAG] = "jquery";
+    $(nav).sortable({
+      items: `> ${LARGE_CATEGORY_ITEM_SELECTOR}`,
+      handle: `.${LARGE_CATEGORY_HANDLE_CLASS}`,
+      placeholder: LARGE_CATEGORY_PLACEHOLDER_CLASS,
+      axis: "y",
+      tolerance: "pointer",
+      start: (_event, ui) => {
+        nav.classList.add(LARGE_CATEGORY_SORTING_ACTIVE_CLASS);
+        ui.item?.addClass?.(LARGE_CATEGORY_DRAGGING_CLASS);
+      },
+      stop: async (_event, ui) => {
+        ui.item?.removeClass?.(LARGE_CATEGORY_DRAGGING_CLASS);
+        nav.classList.remove(LARGE_CATEGORY_SORTING_ACTIVE_CLASS);
+        await persistLargeCategoryOrderFromNav(nav);
+      },
+    });
+    return true;
+  };
+
+  const enableNativeSortable = (nav) => {
+    if (nav.dataset[LARGE_CATEGORY_SORTABLE_FLAG] === "native") {
+      return;
+    }
+    nav.dataset[LARGE_CATEGORY_SORTABLE_FLAG] = "native";
+    let draggingItem = null;
+    let pointerId = null;
+
+    const stopDragging = async () => {
+      if (!draggingItem) {
+        return;
+      }
+      draggingItem.classList.remove(LARGE_CATEGORY_DRAGGING_CLASS);
+      nav.classList.remove(LARGE_CATEGORY_SORTING_ACTIVE_CLASS);
+      const { order } = await persistLargeCategoryOrderFromNav(nav);
+      if (order.length) {
+        applyLargeCategoryOrder(nav, order);
+      }
+      draggingItem = null;
+      pointerId = null;
+    };
+
+    const onPointerMove = (event) => {
+      if (!draggingItem || event.pointerId !== pointerId) {
+        return;
+      }
+      event.preventDefault();
+      const target = document
+        .elementFromPoint(event.clientX, event.clientY)
+        ?.closest?.(LARGE_CATEGORY_ITEM_SELECTOR);
+      if (!target || target === draggingItem || !nav.contains(target)) {
+        return;
+      }
+      const rect = target.getBoundingClientRect();
+      const insertAfter = event.clientY > rect.top + rect.height / 2;
+      nav.insertBefore(draggingItem, insertAfter ? target.nextSibling : target);
+    };
+
+    const onPointerUp = async () => {
+      document.removeEventListener("pointermove", onPointerMove);
+      await stopDragging();
+    };
+
+    nav.addEventListener("pointerdown", (event) => {
+      const handle = event.target?.closest?.(`.${LARGE_CATEGORY_HANDLE_CLASS}`);
+      if (!handle) {
+        return;
+      }
+      const item = handle.closest(LARGE_CATEGORY_ITEM_SELECTOR);
+      if (!item) {
+        return;
+      }
+      event.preventDefault();
+      draggingItem = item;
+      pointerId = event.pointerId;
+      nav.classList.add(LARGE_CATEGORY_SORTING_ACTIVE_CLASS);
+      item.classList.add(LARGE_CATEGORY_DRAGGING_CLASS);
+      nav.setPointerCapture?.(event.pointerId);
+      document.addEventListener("pointermove", onPointerMove);
+      document.addEventListener("pointerup", onPointerUp, { once: true });
+      document.addEventListener("pointercancel", onPointerUp, { once: true });
+    });
+  };
+
+  const disableLargeCategorySorting = (nav) => {
+    if (nav.dataset[LARGE_CATEGORY_SORTABLE_FLAG] === "jquery") {
+      const $ = globalThis.jQuery;
+      try {
+        $?.(nav)?.sortable?.("destroy");
+      } catch (_error) {
+        // ignore
+      }
+    }
+    nav.dataset[LARGE_CATEGORY_SORTABLE_FLAG] = "";
+    removeLargeCategoryHandles(nav);
+  };
+
+  const initializeLargeCategorySorting = async () => {
+    if (!isProfileRulePage()) {
+      return;
+    }
+    const nav = document.querySelector(LARGE_CATEGORY_NAV_SELECTOR);
+    if (!nav) {
+      return;
+    }
+    if (nav.classList.contains(LARGE_CATEGORY_SORTING_ACTIVE_CLASS)) {
+      return;
+    }
+    const settings = await loadSettings();
+    const enabled = settings?.[LARGE_CATEGORY_SORTING_ENABLED_KEY] ?? true;
+    if (!enabled) {
+      disableLargeCategorySorting(nav);
+      return;
+    }
+    const currentIds = getLargeCategoryIds(nav);
+    if (!currentIds.length) {
+      return;
+    }
+    const savedOrder = settings?.[LARGE_CATEGORY_SORTING_KEY]?.order ?? [];
+    const normalized = normalizeLargeCategoryOrder(currentIds, savedOrder);
+    if (savedOrder.length > 0 && !isSameOrder(currentIds, normalized)) {
+      applyLargeCategoryOrder(nav, normalized);
+    }
+    const usingJquery = enableJquerySortable(nav);
+    ensureLargeCategoryHandles(nav, !usingJquery);
+    if (!usingJquery) {
+      enableNativeSortable(nav);
+    }
+  };
+
   const _getViewMonth = () => {
     const rows = getTransactionRows();
     for (const row of rows) {
@@ -1618,6 +1975,11 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     };
   };
 
+  const scheduleLargeCategorySorting = createDebouncedRunner(
+    () => initializeLargeCategorySorting(),
+    120
+  );
+
   const scheduleRunGemini = createDebouncedRunner(runGemini);
   const scheduleDuplicateCheck = createDebouncedRunner(runDuplicateCheck);
   const scheduleCategoryCheck = createDebouncedRunner(runCategoryRuleAlert);
@@ -1628,6 +1990,17 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   scheduleRunGemini();
   scheduleDuplicateCheck();
   scheduleCategoryCheck();
+
+  if (isProfileRulePage()) {
+    scheduleLargeCategorySorting();
+    const largeCategoryObserver = new MutationObserver(() =>
+      scheduleLargeCategorySorting()
+    );
+    largeCategoryObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  }
 
   const geminiObserver = new MutationObserver(() => scheduleRunGemini());
   geminiObserver.observe(listBody, { childList: true, subtree: true });
@@ -1654,6 +2027,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     log("settings changed; session flag cleared (no auto-run)");
     scheduleDuplicateCheck();
     scheduleCategoryCheck();
+    if (isProfileRulePage()) {
+      scheduleLargeCategorySorting();
+    }
   };
 
   const handleUiPrefsChange = (next) => {

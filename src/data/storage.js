@@ -24,6 +24,9 @@ const DEFAULT_SETTINGS = {
   model: "gemini-2.5-flash",
   featureFlags: DEFAULT_FEATURE_FLAGS,
   categoryRules: DEFAULT_CATEGORY_RULES,
+  // Keep saved order while allowing users to temporarily disable sorting.
+  largeCategoryOrder: null,
+  largeCategoryOrderEnabled: true,
 };
 
 const hasChromeStorage = () =>
