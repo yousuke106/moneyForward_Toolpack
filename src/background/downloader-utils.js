@@ -1,7 +1,5 @@
 // カレンダーヘッダーの表示（YYYY〜MM）から年月を抜き出すための正規表現。
 const HEADER_MONTH_REGEX = /(\d{4})\D+(\d{1,2})/;
-// data: URL でのCSV判定に使うプレフィックス。
-const CSV_DATA_URL_PREFIX = "data:text/csv";
 // 月表示ヘッダーの候補。MoneyForward側のDOM差分に備えて複数指定する。
 export const HEADER_SELECTORS = ["span.fc-header-title", ".fc-header-title"];
 // バッジに使う色はここで統一して管理する。
@@ -41,18 +39,6 @@ export const buildCsvRequestUrl = ({ year, month }) =>
 // ダウンロードファイル名は年月が一目で分かる形に固定する。
 export const buildCsvFilename = ({ year, month }) =>
   `moneyforward_${year}${padMonth(month)}.csv`;
-
-export const dequeueNextFilename = (pendingNames, item, extensionId) => {
-  // data: URLのダウンロードは byExtensionId が入らないことがあるためURLでも判定する。
-  // Some downloads (notably data URLs) may not populate byExtensionId reliably.
-  const isExtensionDownload = item?.byExtensionId === extensionId;
-  const isCsvDataUrl =
-    typeof item?.url === "string" && item.url.startsWith(CSV_DATA_URL_PREFIX);
-  if ((isExtensionDownload || isCsvDataUrl) && pendingNames.length) {
-    return pendingNames.shift();
-  }
-  return null;
-};
 
 // 追加機能は安全側で有効に倒す（設定が無い/壊れている場合も動くようにする）。
 export const isDownloaderEnabled = (settings) =>

@@ -4,7 +4,6 @@ import {
   BADGE_COLORS,
   buildCsvFilename,
   buildCsvRequestUrl,
-  dequeueNextFilename,
   HEADER_SELECTORS,
   isDownloaderEnabled,
   parseMonthFromHeader,
@@ -14,8 +13,6 @@ import {
 const TIMEOUT_MS = 60_000;
 const MENU_ID = "mf-download-visible-month";
 const BADGE_CLEAR_DELAY = 2800;
-// ダウンロード名はイベント順のズレを吸収するためキューで保持する。
-const pendingDownloadNames = [];
 let badgeResetHandle = 0;
 let downloadContextMenuEnabled = true;
 
@@ -154,15 +151,16 @@ const triggerCsvDownload = async (tabId, parsed) => {
     return;
   }
   const filename = buildCsvFilename(parsed);
-  pendingDownloadNames.push(filename);
   try {
     await chrome.downloads.download({
       url: result.dataUrl,
+      // onDeterminingFilename を使わず、拡張由来の保存名をここで明示する。
+      filename,
+      conflictAction: "uniquify",
       saveAs: true,
     });
     await setBadge("DL", BADGE_COLORS.success);
   } catch {
-    pendingDownloadNames.pop();
     await setBadge("NG", BADGE_COLORS.error);
   }
 };
@@ -253,20 +251,6 @@ const syncDownloaderToggle = async () => {
     await refreshContextMenu(true);
   }
 };
-
-chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
-  // ダウンロード開始時にキューから次のファイル名を割り当てる。
-  const nextName = dequeueNextFilename(
-    pendingDownloadNames,
-    item,
-    chrome.runtime.id
-  );
-  if (nextName) {
-    suggest({ filename: nextName, conflictAction: "uniquify" });
-  } else {
-    suggest();
-  }
-});
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "requestGeminiAnalysis") {

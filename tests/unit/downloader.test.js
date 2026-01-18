@@ -2,7 +2,6 @@ import assert from "node:assert";
 import {
   buildCsvFilename,
   buildCsvRequestUrl,
-  dequeueNextFilename,
   isDownloaderEnabled,
   parseMonthFromHeader,
 } from "../../src/background/downloader-utils.js";
@@ -31,33 +30,6 @@ export const runDownloaderTests = () => {
     buildCsvFilename({ year: 2025, month: 3 }),
     "moneyforward_202503.csv"
   );
-
-  // queue dequeue
-  const queue = ["a.csv", "b.csv"];
-  const item = { byExtensionId: "ext-1" };
-  const next = dequeueNextFilename(queue, item, "ext-1");
-  assert.strictEqual(next, "a.csv");
-  assert.deepStrictEqual(queue, ["b.csv"]);
-
-  const noMatch = dequeueNextFilename(queue, { byExtensionId: "other" }, "ext-1");
-  assert.strictEqual(noMatch, null);
-  assert.deepStrictEqual(queue, ["b.csv"]);
-
-  const dataUrlQueue = ["c.csv"];
-  const dataUrlItem = { url: "data:text/csv;base64,ZW1wdHk=" };
-  const dataUrlMatch = dequeueNextFilename(dataUrlQueue, dataUrlItem, "ext-1");
-  assert.strictEqual(dataUrlMatch, "c.csv");
-  assert.deepStrictEqual(dataUrlQueue, []);
-
-  const otherDataUrlQueue = ["d.csv"];
-  const otherDataUrlItem = { url: "data:text/plain;base64,ZW1wdHk=" };
-  const otherDataUrlMatch = dequeueNextFilename(
-    otherDataUrlQueue,
-    otherDataUrlItem,
-    "ext-1"
-  );
-  assert.strictEqual(otherDataUrlMatch, null);
-  assert.deepStrictEqual(otherDataUrlQueue, ["d.csv"]);
 
   // toggle default/false
   assert.strictEqual(isDownloaderEnabled(undefined), true);
