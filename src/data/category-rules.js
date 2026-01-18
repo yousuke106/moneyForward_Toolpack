@@ -1,5 +1,7 @@
+// ルール総数の上限。sync容量やUI操作性を考慮して控えめに設定。
 const MAX_CATEGORY_RULES = 200;
 
+// 表記ゆれを吸収して比較キーを安定化する。
 const normalizeCategory = (text) => {
   if (!text) {
     return "";
@@ -14,6 +16,7 @@ const normalizeCategory = (text) => {
   return withoutSpaces;
 };
 
+// 大項目+中項目の組を正規化して比較キーにする。
 const buildRuleKey = (rule) => {
   const large = normalizeCategory(rule?.large ?? "");
   const middle = normalizeCategory(rule?.middle ?? "");
@@ -23,6 +26,7 @@ const buildRuleKey = (rule) => {
   return `${large}|${middle}`;
 };
 
+// 検索しやすいようにSet化したホワイト/ブラックリストを作る。
 const buildRuleSets = (categoryRules = {}) => {
   const whitelist = new Set();
   const blacklist = new Set();
@@ -45,6 +49,7 @@ const buildRuleSets = (categoryRules = {}) => {
   return { whitelist, blacklist };
 };
 
+// ルールに照らした結果（違反種別）を返す。違反なしは null。
 const evaluateCategoryRule = (params, sets) => {
   const key = buildRuleKey(params);
   if (!key) {
@@ -70,7 +75,9 @@ const evaluateCategoryRule = (params, sets) => {
   return null;
 };
 
+// インポートや保存前のバリデーションをまとめて行う。
 const validateCategoryRules = (categoryRules = {}) => {
+  // 形式チェックと上限、重複の3点をここで検証する。
   const errors = [];
   const { whitelist = [], blacklist = [] } = categoryRules;
 
@@ -86,10 +93,12 @@ const validateCategoryRules = (categoryRules = {}) => {
   }
 
   if (totalCount > MAX_CATEGORY_RULES) {
+    // 上限超過は保存を拒否する。
     errors.push("too_many_rules");
   }
 
   const checkList = (list, kind) => {
+    // 空行や重複はユーザー体験上問題になるためエラー化する。
     const seen = new Set();
     for (const item of list) {
       const key = buildRuleKey(item);

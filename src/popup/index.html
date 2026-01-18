@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>MoneyForward Toolpack</title>
     <style>
+    /* カラーパレットとレイアウト変数 */
     :root {
       color-scheme: light;
       --bg:
@@ -31,10 +32,12 @@
       --radius: 14px;
     }
 
+    /* 軽量リセット */
     * {
       box-sizing: border-box;
     }
 
+    /* ポップアップ全体のベース */
     body {
       margin: 0;
       padding: 16px;
@@ -47,6 +50,7 @@
       color: var(--text);
     }
 
+    /* メインパネル */
     .panel {
       background: var(--panel);
       border: 1px solid var(--border);
@@ -56,6 +60,7 @@
       backdrop-filter: blur(10px);
     }
 
+    /* ヘッダー（タイトルとバッジ） */
     header.hero {
       display: flex;
       align-items: center;
@@ -104,6 +109,7 @@
       font-weight: 600;
     }
 
+    /* Geminiの状態表示 */
     .pill.status {
       background: rgba(15, 157, 88, 0.14);
       color: var(--ok);

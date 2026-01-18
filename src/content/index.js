@@ -1,10 +1,13 @@
 /* globals chrome */
 
+// 金額文字列から数値を抜き出すための正規表現。
 const AMOUNT_REGEX = /[-+−]?\d[\d,]*/u;
 
+// マイナス表記の先頭判定に使う（支出判定）。
 const NEGATIVE_HEAD_REGEX = /^[-−]/u;
 
 (() => {
+  // ラベル選択肢はUIで使う表示文言に揃えて管理する。
   const LABELS = [
     { value: "", text: "未設定" },
     { value: "using", text: "利用中" },
@@ -12,6 +15,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     { value: "cancel", text: "解約予定" },
   ];
 
+  // 満足度は固定候補なので配列で定義しておく。
   const SATISFACTION_OPTIONS = [
     { value: "", text: "未選択" },
     { value: "top1", text: "Top1" },
@@ -22,6 +26,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     { value: "worst3", text: "Worst3" },
   ];
 
+  // DOM挿入時に参照するクラス/セレクタはここでまとめる。
   const selectClass = "mf-sub-select";
   const labelInjectedFlag = "mfSubLabelInjected";
   const memoSelectorPrimary = "td.memo.form-switch-td";
@@ -42,6 +47,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     memoText: "td.memo .noform span",
     noteText: "td.note",
   };
+  // セッション内のフラグ操作を小さく包んで可読性を上げる。
   const getSessionFlag = (key) => sessionStorage.getItem(key);
   const setSessionFlag = (key, value) => sessionStorage.setItem(key, value);
   const removeSessionFlag = (key) => sessionStorage.removeItem(key);
@@ -56,6 +62,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return keys;
   };
 
+  // devビルド/セッションフラグで詳細ログを出せるようにする。
   const isDev =
     getSessionFlag("mf_subs_debug") === "true" ||
     (globalThis.chrome?.runtime?.getManifest?.()?.version_name ?? "").includes(
@@ -97,7 +104,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const MASKING_TOGGLE_ID = "mf-tp-mask-toggle";
   const DEFAULT_THRESHOLD = 70;
   const DEFAULT_MODEL = "gemini-2.5-flash";
+  // Gemini対象外とする固定ワードは業務要件ベースで明示的に除外する。
   const EXCLUDE_KEYWORDS = ["振替", "投資積立", "住宅ローン", "固定費"];
+  // 設定値は頻繁に参照するためメモリにキャッシュする。
   let cachedSettings = null;
   let cachedSettingsPromise = null;
   let cachedUiPrefs = null;
@@ -109,7 +118,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // 店名は空白・絵文字を除去して比較用に正規化する。
   const normalizeStoreName = (raw) => {
+    // 店名比較は表記揺れが多いので空白と絵文字を落として安定化する。
     if (!raw) {
       return "";
     }
@@ -122,10 +133,12 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return cleaned;
   };
 
+  // 保存キーは用途ごとにプレフィックスを付けて衝突を避ける。
   const buildTxKey = (id) => `tx:${id}`;
   const buildStoreAmountKey = (store, amount) =>
     `sa:${normalizeStoreName(store)}|${amount}`;
   const buildStoreDateKey = ({ store, amount, date }) => {
+    // 日付まで含めるキーは満足度復元用（同額でも日付違いを分ける）。
     if (!(store && amount !== null && amount !== undefined && date)) {
       return "";
     }
@@ -135,6 +148,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
     return `sd:${normalizedStore}|${amount}|${date}`;
   };
+  // カテゴリ名は全角/半角や空白の揺れを吸収して比較する。
   const normalizeCategory = (text) => {
     if (!text) {
       return "";
@@ -148,6 +162,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     const withoutSpaces = nk.replace(/\s+/gu, "");
     return withoutSpaces;
   };
+  // 大項目+中項目の組み合わせを比較キーにする。
   const buildCategoryRuleKey = ({ category, subcategory }) => {
     const large = normalizeCategory(category);
     const middle = normalizeCategory(subcategory);
@@ -156,7 +171,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
     return `${large}|${middle}`;
   };
+  // ルールの検索効率を上げるため Set に変換して保持する。
   const buildCategoryRuleSets = (categoryRules = {}) => {
+    // Set化しておくと行ごとの判定が O(1) で済む。
     const whitelist = new Set();
     const blacklist = new Set();
     const { whitelist: wl = [], blacklist: bl = [] } = categoryRules;
@@ -181,7 +198,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return { whitelist, blacklist };
   };
 
+  // ルール違反の有無と理由を返す（違反なしは null）。
   const evaluateCategoryRule = ({ category, subcategory }, sets) => {
+    // whitelist がある場合は「含まれない」ことを違反とみなす。
     const key = buildCategoryRuleKey({ category, subcategory });
     if (!key) {
       return null;
@@ -204,6 +223,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
 
     return null;
   };
+  // 日付+店名+金額をキーに重複候補を検出する。
   const buildDuplicateKey = ({ date, store, amount }) => {
     if (!(date && store) || amount === null || amount === undefined) {
       return "";
@@ -215,7 +235,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return `dup:${date}|${normalizedStore}|${amount}`;
   };
 
+  // 金額セルの文字列から数値を取り出す（絶対値で扱う）。
   const parseAmount = (text) => {
+    // 画面上の表記は符号や区切りが揺れるため、最小限の正規化で数値化する。
     if (!text) {
       return null;
     }
@@ -230,7 +252,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return Math.abs(numeric);
   };
 
+  // テーブルのdata属性から取引日(YYYY-MM-DD)を抽出する。
   const parseDate = (row) => {
+    // data-table-sortable-value は安定した日付表記なのでここを優先する。
     const sortable = row
       .querySelector("td.date")
       ?.getAttribute("data-table-sortable-value");
@@ -241,8 +265,10 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return "";
   };
 
+  // chrome.storage が無効な環境でも落ちないように安全に読む。
   const safeStorageGet = (area, keys, fallback) =>
     new Promise((resolve) => {
+      // コンテキストによってはstorageが使えないため即座にフォールバックする。
       const store = chrome?.storage?.[area];
       if (!(chrome?.runtime?.id && store)) {
         resolve(fallback);
@@ -255,8 +281,10 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       }
     });
 
+  // 失敗時もアプリ全体は継続させるため、例外を握りつぶす。
   const safeStorageSet = (area, payload) =>
     new Promise((resolve) => {
+      // 書き込み失敗が致命的にならない用途向け。
       const store = chrome?.storage?.[area];
       if (!(chrome?.runtime?.id && store)) {
         resolve();
@@ -269,6 +297,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       }
     });
 
+  // settings保存では失敗を検知したいので例外を返す版を用意する。
   const setStorageWithError = (area, payload) =>
     new Promise((resolve, reject) => {
       const store = chrome?.storage?.[area];
@@ -290,6 +319,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       }
     });
 
+  // sync保存の容量判定に使う。
   const getSyncBytesInUse = () =>
     new Promise((resolve, reject) => {
       const store = chrome?.storage?.sync;
@@ -311,6 +341,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       }
     });
 
+  // UI軽量設定はsync優先で読み、無ければlocalへフォールバックする。
   const loadUiPrefs = async () => {
     if (cachedUiPrefs) {
       return cachedUiPrefs;
@@ -343,6 +374,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // UI設定はパッチをマージして保存し、sync/local両方に書く。
   const saveUiPrefs = async (patch) => {
     // 将来キーが増えても破壊しないよう、既存値とマージして保存する
     const current = await loadUiPrefs();
@@ -354,6 +386,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     cachedUiPrefs = next;
   };
 
+  // ラベル保存はlocalのみで扱う（軽量&確実）。
   const loadLabels = () =>
     safeStorageGet(
       "local",
@@ -364,7 +397,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       }
     );
 
+  // 取引IDと店名+金額の両方へ同時に保存する。
   const saveLabel = async ({ txKey, storeAmountKey, label }) => {
+    // ラベルは「取引ID」と「店名+金額」双方へ保存し、自動適用に使う。
     const { labelsByTxId, labelsByStoreAmount } = await loadLabels();
     if (label) {
       labelsByTxId[txKey] = label;
@@ -379,6 +414,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     });
   };
 
+  // 満足度は取引IDと店名+日付の2系統で保存する。
   const loadSatisfaction = () =>
     safeStorageGet(
       "local",
@@ -386,7 +422,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       { satisfactionByTxId: {}, satisfactionByStoreDate: {} }
     );
 
+  // 入力が空なら削除し、入力がある場合のみ保存する。
   const saveSatisfaction = async ({ txKey, sdKey, rank, note }) => {
+    // 空の入力は保存しないことでストレージを肥大化させない。
     const maps = await loadSatisfaction();
     const trimmedNote = note?.trim?.() ?? "";
     const payload =
@@ -408,6 +446,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     await safeStorageSet("local", maps);
   };
 
+  // DOMから取引に紐づく情報を取り出す小さなヘルパー群。
   const findTxId = (row) =>
     row.querySelector('input[name="user_asset_act[id]"]')?.value ?? "";
 
@@ -442,10 +481,12 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const getTransactionRows = () =>
     document.querySelectorAll(SELECTORS.transactionRow);
 
+  // マスク対象の付け外しをまとめて扱う。
   const addMaskClass = (element) =>
     element?.classList?.add?.(MASKING_TARGET_CLASS);
 
   const addMaskToAll = (elements) => {
+    // NodeListはfor...ofが安全なので統一する。
     for (const el of elements) {
       addMaskClass(el);
     }
@@ -460,6 +501,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // マスク状態は設定読み込み後に上書きされる。
   let maskingFeatureEnabled = DEFAULT_UI_PREFS.maskingFeatureEnabled;
   let maskingEnabled = DEFAULT_UI_PREFS.maskingEnabled;
   let maskingPrefsLoaded = false;
@@ -470,6 +512,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     removeMaskFromAll(current);
   };
 
+  // 金額が表示される画面を幅広くカバーするためのルール集。
   const MASK_RULES = [
     // `/cf` 家計簿 / `/cf/summary` 上部の月次収支テーブル
     {
@@ -522,6 +565,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   ];
 
   const applyIndexedMaskRule = (rule) => {
+    // 固定位置だけをマスクしたいケース用。
     const cells = document.querySelectorAll(rule.selector);
     for (const idx of rule.indexes ?? []) {
       addMaskClass(cells[idx]);
@@ -535,6 +579,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const applyYenMaskRule = (rule) => {
+    // 円表記だけを拾うことで過剰なマスクを避ける。
     for (const selector of rule.selectors ?? []) {
       const targets = document.querySelectorAll(selector);
       for (const target of targets) {
@@ -544,11 +589,13 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const applyAllMaskRule = (rule) => {
+    // セレクタ一致要素をまとめてマスク対象にする。
     for (const selector of rule.selectors ?? []) {
       addMaskToAll(document.querySelectorAll(selector));
     }
   };
 
+  // ルール定義に応じてDOMを走査し、マスク対象を付与する。
   const applyMaskRules = () => {
     for (const rule of MASK_RULES) {
       if (rule.mode === "indexed") {
@@ -563,6 +610,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // 家計簿明細の「内容」「金額」セルを優先的にマスク対象にする。
   const markTransactionTableTargets = () => {
     // 明細テーブル: 「内容」「金額（円）」セルをマスク対象にする
     const rows = getTransactionRows();
@@ -575,6 +623,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const applyBalanceSheetPortfolioMask = () => {
+    // 先月実績などの別列を避け、資産金額だけに限定する。
     // `/bs` 資産構成: 「先月実績」ではなく資産金額（2列目）だけをマスク対象にする
     const portfolioLinks = document.querySelectorAll(
       'table.table-bordered tbody tr th a[href^="/bs/portfolio#"]'
@@ -587,6 +636,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const maskIfContainsYen = (element) => {
+    // 通貨表記の有無で判定し、誤マスクを抑える。
     if (!element) {
       return;
     }
@@ -599,6 +649,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   // markBalanceSheetDetailTargets はルール化により不要
 
   const applyBalanceSheetHistoryMask = () => {
+    // 履歴テーブルだけを対象にして無関係な表を避ける。
     // `/bs` 資産推移: 金額（円）が入るセルだけをマスク対象にする
     const historyTables = document.querySelectorAll("table.table-bordered");
     for (const table of historyTables) {
@@ -620,6 +671,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const applyBalanceSheetLiabilityMask = () => {
+    // 負債関連は画面構造が複数あるため個別に処理する。
     // `/bs` 負債構成: 金額（円）が入るセルだけをマスク対象にする
     const liabilityRoot = document.querySelector("#bs-liability");
     if (liabilityRoot) {
@@ -644,6 +696,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   const applyAccountsAssetMask = () => {
+    // 列位置で特定して、同じクラス名の他列を誤マスクしない。
     // `/accounts` 資産一覧: 「資産」列のみをマスク対象にする
     // NOTE: `.number` クラスが他列にも使われる可能性があるため、列位置で特定する
     const accountsTable = document.querySelector("#account-table");
@@ -661,6 +714,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // 通常ルールで拾えないページは個別対応する。
   const applyMaskSpecialCases = () => {
     applyBalanceSheetPortfolioMask();
     applyBalanceSheetHistoryMask();
@@ -668,6 +722,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     applyAccountsAssetMask();
   };
 
+  // 既存マスクをクリアした上で全対象を再マーキングする。
   const markMaskTargets = () => {
     clearMaskTargets();
     markTransactionTableTargets();
@@ -675,6 +730,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     applyMaskSpecialCases();
   };
 
+  // マスク切り替えボタンの見た目とアクセシビリティを更新する。
   const updateMaskToggleUi = () => {
     const button = document.getElementById(MASKING_TOGGLE_ID);
     if (!button) {
@@ -685,6 +741,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     button.title = "内容/金額（円）をぼかして表示します（クリックで切替）";
   };
 
+  // ルートclassでCSSを切り替えつつ、対象セルを再スキャンする。
   const applyMasking = () => {
     document.documentElement.classList.toggle(
       MASKING_ROOT_CLASS,
@@ -694,6 +751,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     updateMaskToggleUi();
   };
 
+  // 機能自体が無効のときはUIもマスクも完全に取り除く。
   const disableMaskingFeature = () => {
     // 機能OFF時はボタンを出さず、画面を必ず非マスク状態に戻す（スクショ対策機能そのものを停止）
     const button = document.getElementById(MASKING_TOGGLE_ID);
@@ -706,7 +764,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     removeMaskFromAll(currentTargets);
   };
 
+  // ボタンは重複生成しないようにガードする。
   const ensureMaskToggleButton = () => {
+    // ページに一つだけボタンを置き、重複追加を防ぐ。
     if (!maskingFeatureEnabled) {
       return;
     }
@@ -731,6 +791,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     updateMaskToggleUi();
   };
 
+  // 設定読込→ボタン生成→マスク適用の順で初期化する。
   const initializeMasking = async () => {
     if (maskingPrefsLoaded || maskingPrefsLoading) {
       return;
@@ -755,6 +816,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     applyMasking();
   };
 
+  // 支出判定はマイナス記号の有無で行う（表示表現に合わせる）。
   const isNegativeAmount = (row) => {
     const cell = findAmountCell(row);
     const text =
@@ -769,6 +831,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
 
   const getHeadRow = () => document.querySelector(SELECTORS.tableHeadRow);
 
+  // ヘッダーセルは共通処理で生成し、挿入位置は後で指定する。
   const createHeadCell = (text, className) => {
     const th = document.createElement("th");
     if (className) {
@@ -789,6 +852,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return true;
   };
 
+  // すでに存在する場合は挿入しないようガードする。
   const ensureHeaderCells = ({
     headRow,
     existingSelector,
@@ -825,6 +889,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // サブスク列のヘッダーをメモ列の直後に挿入する。
   const ensureLabelHeader = () => {
     const headRow = getHeadRow();
     ensureHeaderCells({
@@ -837,6 +902,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     });
   };
 
+  // 既存セルがあれば再利用し、無ければメモ列の直後に生成する。
   const getOrCreateLabelCell = (row) => {
     const memoCell = getMemoCell(row);
     if (!memoCell) {
@@ -852,6 +918,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return td;
   };
 
+  // 機能OFF時は追加UIをすべて取り除く。
   const removeLabelUi = () => {
     const head = document.querySelector(`th.${labelHeadClass}`);
     head?.remove();
@@ -863,6 +930,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // ラベル変更時はハイライトも同期させる。
   const setSelectValue = (row, label) => {
     const select = row.querySelector(`select.${selectClass}`);
     if (!select) {
@@ -876,7 +944,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // select要素を挿入し、クリックイベントの伝播を止めて元の行操作と干渉しないようにする。
   const injectSelect = (row, onChange) => {
+    // 行クリック等の既存イベントと干渉しないよう伝播を抑制する。
     const labelCell = getOrCreateLabelCell(row);
     if (!labelCell) {
       return;
@@ -920,6 +990,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     labelCell.dataset[labelInjectedFlag] = "1";
   };
 
+  // 満足度列は2列セットで追加する。
   const ensureSatisfactionHeader = () => {
     const headRow = getHeadRow();
     ensureHeaderCells({
@@ -932,6 +1003,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     });
   };
 
+  // 既存の満足度UIを丸ごと削除する。
   const removeSatisfactionUi = () => {
     const headRow = getHeadRow();
     if (headRow && headRow.dataset.mfSatHead === "1") {
@@ -953,7 +1025,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // 満足度のセレクト/メモ入力を行末に追加する。
   const injectSatisfactionCells = (row, satisfactionMaps, onChange) => {
+    // 同じ行に二重で挿入しないようフラグでガードする。
     if (row.dataset.mfSatInjected === "1") {
       return;
     }
@@ -1015,8 +1089,10 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     row.dataset.mfSatInjected = "1";
   };
 
+  // サブスクラベル列の生成と初期値の反映を行う。
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 初期化処理を一括で行うため許容
   const init = async () => {
+    // 機能OFF時はUIを即撤去して余計なDOM操作を避ける。
     const settings = await loadSettings();
     const labelEnabled =
       settings?.featureFlags?.subscriptionLabelEnabled ?? true;
@@ -1043,6 +1119,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     };
 
     for (const row of rows) {
+      // メモ列がない行はスキップして処理を継続する。
       const memoCell = getMemoCell(row);
       if (!memoCell) {
         missingMemo += 1;
@@ -1071,7 +1148,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // 満足度UIの初期化と保存値の反映。
   const runSatisfaction = async () => {
+    // 機能OFF時はUI撤去のみで早期リターンする。
     const settings = await loadSettings();
     const enabled = settings?.featureFlags?.satisfactionEnabled ?? true;
     if (!enabled) {
@@ -1091,6 +1170,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       await saveSatisfaction({ txKey, sdKey, rank, note });
     };
     for (const row of rows) {
+      // 保存済みデータを読み出しながらUIを挿入する。
       injectSatisfactionCells(
         row,
         { satisfactionByTxId, satisfactionByStoreDate },
@@ -1099,7 +1179,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // DOM更新が多いので requestAnimationFrame でまとめて初期化する。
   const scheduleInit = (() => {
+    // DOM更新が連続するため、フレーム単位でまとめて処理する。
     let pending = false;
     return () => {
       if (pending) {
@@ -1128,6 +1210,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     scheduleInit();
   }
 
+  // 明細テーブルのDOM更新を監視して再描画タイミングに追随する。
   const listBody =
     document.querySelector(SELECTORS.tableBodyPrimary) ??
     document.querySelector(SELECTORS.tableBodyFallback) ??
@@ -1136,7 +1219,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   observer.observe(listBody, { childList: true, subtree: true });
 
   // Gemini 解析
+  // 設定は頻繁に読むためキャッシュし、同時実行を抑制する。
   const loadSettings = async () => {
+    // 連続読み込みはPromiseを共有し、二重取得を避ける。
     if (cachedSettings) {
       return cachedSettings;
     }
@@ -1160,7 +1245,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   // options画面と同じ保存先判定（sync容量チェック）で設定を保存する。
+  // options画面と同じ容量判定ロジックで保存先を決める。
   const saveSettingsWithFallback = async (nextSettings) => {
+    // sync容量が厳しい場合はlocalに逃がして保存失敗を防ぐ。
     const SYNC_THRESHOLD_BYTES = 90 * 1024;
     const SYNC_TOTAL_LIMIT_BYTES = 100 * 1024;
     const bytes = await getSyncBytesInUse().catch(() => SYNC_TOTAL_LIMIT_BYTES);
@@ -1177,9 +1264,11 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // ページ種別によって有効な機能が異なるため、判定をまとめる。
   const isProfileRulePage = () => location.pathname === "/profile/rule";
   const isCfPage = () => location.pathname.startsWith("/cf");
 
+  // カテゴリ並び替えはDOM構造が変わっても動くように抽象化する。
   const getLargeCategoryItems = (nav) =>
     Array.from(nav?.children ?? []).filter((child) =>
       child?.matches?.(LARGE_CATEGORY_ITEM_SELECTOR)
@@ -1199,7 +1288,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return ids;
   };
 
+  // 保存済みの並びと現在のDOM差分を突き合わせて正規化する。
   const normalizeLargeCategoryOrder = (currentIds, savedOrder = []) => {
+    // 保存済みの順序に存在しないIDは落として今のDOMに合わせる。
     const currentSet = new Set(currentIds);
     const seen = new Set();
     const normalized = [];
@@ -1231,7 +1322,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return true;
   };
 
+  // DOMを入れ替えて見た目の順序を更新する。
   const applyLargeCategoryOrder = (nav, orderedIds) => {
+    // DocumentFragmentで再配置し、余計な再描画を抑える。
     const orderSet = new Set(orderedIds);
     const items = getLargeCategoryItems(nav);
     const byId = new Map();
@@ -1260,6 +1353,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     nav.appendChild(fragment);
   };
 
+  // 並び替え操作用のハンドルを追加する。
   const ensureLargeCategoryHandles = (nav, _enableNativeDrag) => {
     for (const item of getLargeCategoryItems(nav)) {
       if (item.querySelector(`.${LARGE_CATEGORY_HANDLE_CLASS}`)) {
@@ -1295,6 +1389,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // UIで確定した並び順を設定に保存する。
   const persistLargeCategoryOrderFromNav = async (nav) => {
     const order = getLargeCategoryIds(nav);
     if (!order.length) {
@@ -1319,6 +1414,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   // 既存の jQuery UI を使える場合はそれを優先し、無ければネイティブ D&D に切り替える。
+  // jQuery UIが使える環境では既存機能を活用する。
   const enableJquerySortable = (nav) => {
     const $ = globalThis.jQuery;
     if (typeof $?.fn?.sortable !== "function") {
@@ -1352,7 +1448,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return true;
   };
 
+  // jQueryが無い環境向けの最低限のドラッグ&ドロップ。
   const enableNativeSortable = (nav) => {
+    // PointerEventsで最低限のD&D体験を提供する。
     if (nav.dataset[LARGE_CATEGORY_SORTABLE_FLAG] === "native") {
       return;
     }
@@ -1375,6 +1473,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     };
 
     const onPointerMove = (event) => {
+      // ドラッグ中は下半分に入ったら後ろへ挿入する。
       if (!draggingItem || event.pointerId !== pointerId) {
         return;
       }
@@ -1416,6 +1515,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     });
   };
 
+  // 機能OFF時はDOMとイベントを両方撤去する。
   const disableLargeCategorySorting = (nav) => {
     if (nav.dataset[LARGE_CATEGORY_SORTABLE_FLAG] === "jquery") {
       const $ = globalThis.jQuery;
@@ -1429,7 +1529,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     removeLargeCategoryHandles(nav);
   };
 
+  // プロフィールのルール画面でのみ並び替え機能を初期化する。
   const initializeLargeCategorySorting = async () => {
+    // 並び替えは保存済み順序があるときだけ再適用する。
     if (!isProfileRulePage()) {
       return;
     }
@@ -1462,6 +1564,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // /cf のカテゴリメニュー用に別DOM構造を扱う。
   const getCfLargeCategoryItems = (menu) =>
     Array.from(menu?.children ?? []).filter((child) =>
       child?.matches?.(CF_LARGE_CATEGORY_ITEM_SELECTOR)
@@ -1481,6 +1584,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return ids;
   };
 
+  // /cfのカテゴリメニューで並び順を反映する。
   const applyCfLargeCategoryOrder = (menu, orderedIds) => {
     const orderSet = new Set(orderedIds);
     const items = getCfLargeCategoryItems(menu);
@@ -1510,7 +1614,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     menu.appendChild(fragment);
   };
 
+  // /cf画面のメニューは描画遅延があるため、再実行に耐える形で初期化する。
   const initializeCfLargeCategoryOrdering = async () => {
+    // メニューが描画されるまで待ちつつ、同じ順序なら再適用しない。
     if (!isCfPage()) {
       return;
     }
@@ -1558,6 +1664,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     );
   };
 
+  // Gemini解析の実行済み判定に使う月を取得する。
   const _getViewMonth = () => {
     const rows = getTransactionRows();
     for (const row of rows) {
@@ -1570,6 +1677,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   };
 
+  // 月次で一度だけGeminiを実行するためのセッションフラグ。
   const isMonthProcessed = (month) =>
     getSessionFlag(`${SESSION_FLAG_PREFIX}${month}`) === "true";
 
@@ -1577,6 +1685,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     setSessionFlag(`${SESSION_FLAG_PREFIX}${month}`, "true");
   };
 
+  // 設定変更時に再解析できるようフラグをクリアする。
   const clearSessionFlags = () => {
     const targets = getSessionFlagKeys().filter((key) =>
       key.startsWith(SESSION_FLAG_PREFIX)
@@ -1586,11 +1695,13 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // 進捗オーバーレイの要素IDは一箇所で管理する。
   const overlayIds = {
     overlay: "mf-sub-overlay",
     indicator: "mf-sub-indicator",
   };
 
+  // オーバーレイは確実にDOMから除去し、スクロールを戻す。
   const removeOverlayById = () => {
     const overlay = document.getElementById(overlayIds.overlay);
     if (overlay) {
@@ -1599,7 +1710,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     document.documentElement.style.overflow = "";
   };
 
+  // Gemini解析中の進捗表示を画面全体に出す。
   const showProgressOverlay = (totalBatches) => {
+    // 解析中はスクロールを止め、ユーザーに進行中であることを示す。
     removeOverlayById();
     document.documentElement.style.overflow = "hidden";
     const overlay = document.createElement("div");
@@ -1637,7 +1750,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return () => removeOverlayById();
   };
 
+  // 進捗UIの文言とバーを更新する。
   const updateProgressOverlay = (current, total, remainingCount, opts = {}) => {
+    // 失敗時はエラーメッセージで上書きする。
     const card = document.getElementById(overlayIds.indicator);
     if (!card) {
       return;
@@ -1664,6 +1779,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // サブテキストは完了/進行中でメッセージを切り替える。
   const getProgressText = (current, total, remainingCount, opts) => {
     if (opts.done) {
       return "結果を反映しました";
@@ -1672,11 +1788,13 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return `バッチ ${current}/${total}（残り ${safeRemaining} 件）`;
   };
 
+  // バッチ進捗を0-100%に丸める。
   const getProgressPercent = (current, total) => {
     const ratio = current / total;
     return Math.min(100, Math.round(ratio * 100));
   };
 
+  // 成功/失敗に応じてクラスを切り替える。
   const applyStatusIndicators = (card, statusEl, opts) => {
     const isDone = Boolean(opts.done);
     const isError = Boolean(opts.error);
@@ -1685,6 +1803,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     card.classList.toggle("mf-sub-indicator--error", isError);
   };
 
+  // 取引行からGemini解析に必要な情報を抽出する。
   const extractTransactionFields = (row) => {
     const txId = findTxId(row);
     const amount = extractAmount(row);
@@ -1705,6 +1824,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     };
   };
 
+  // 解析対象外（収入/振替など）は除外する。
   const shouldIncludeTransaction = ({
     txId,
     amount,
@@ -1726,7 +1846,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return !excluded;
   };
 
+  // 解析対象の取引だけを配列化する。
   const collectTransactions = () => {
+    // DOMから抽出→条件フィルタまでを1回で行う。
     const rows = getTransactionRows();
     const txList = [];
     for (const row of rows) {
@@ -1753,6 +1875,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return txList;
   };
 
+  // 重複候補をキーでまとめ、対象ID集合を返す。
   const groupDuplicates = (transactions) => {
     const byKey = new Map();
     const list =
@@ -1785,6 +1908,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return { byKey, duplicateTxIds };
   };
 
+  // 重複表示をリセットする。
   const clearDuplicateHighlight = () => {
     const rows = getTransactionRows();
     for (const row of rows) {
@@ -1795,6 +1919,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // 重複候補の行だけを強調表示する。
   const applyDuplicateHighlight = (duplicateTxIds) => {
     const rows = getTransactionRows();
     for (const row of rows) {
@@ -1811,6 +1936,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // カテゴリ警告の表示を解除する。
   const clearCategoryAlert = (row) => {
     row.classList.remove(CATEGORY_ALERT_ROW_CLASS);
     const categoryCell = row.querySelector(SELECTORS.categoryLarge);
@@ -1834,6 +1960,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return { category, subcategory };
   };
 
+  // ルール違反の理由をtitleで伝える。
   const setCategoryAlert = (row, violation) => {
     row.classList.add(CATEGORY_ALERT_ROW_CLASS);
     const categoryCell = row.querySelector(SELECTORS.categoryLarge);
@@ -1847,6 +1974,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     row.title = reasonText;
   };
 
+  // 全行にルール違反チェックを適用する。
   const applyCategoryAlert = (sets) => {
     const rows = getTransactionRows();
     for (const row of rows) {
@@ -1869,6 +1997,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // Geminiスコアが閾値以上の行をハイライトする。
   const applyGeminiHighlight = (results, threshold) => {
     const rows = getTransactionRows();
     const scoreMap = new Map();
@@ -1889,6 +2018,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // 重複チェックは設定に応じて実行/停止する。
   const runDuplicateCheck = async () => {
     const settings = await loadSettings();
     const enabled = settings.featureFlags?.duplicateCheckEnabled ?? true;
@@ -1911,6 +2041,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     applyDuplicateHighlight(duplicateTxIds);
   };
 
+  // カテゴリルール警告はルールが空なら全解除する。
   const runCategoryRuleAlert = async () => {
     const settings = await loadSettings();
     const enabled = settings.featureFlags?.categoryRuleAlertEnabled ?? true;
@@ -1935,7 +2066,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     applyCategoryAlert(sets);
   };
 
+  // Gemini解析は月単位で1回だけ実行し、結果をハイライトに反映する。
   const runGemini = async () => {
+    // 設定不備や二重実行はここで早期に弾く。
     const settings = await loadSettings();
     const apiKey = settings.geminiApiKey;
     const threshold = settings.scoreThreshold ?? DEFAULT_THRESHOLD;
@@ -1961,6 +2094,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 
     if (isMonthProcessed(month)) {
+      // 同月内の再実行はセッション内で抑止する。
       log("skip: session flag hit", month);
       return;
     }
@@ -1993,6 +2127,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     setTimeout(() => removeOverlay(), 1200);
   };
 
+  // API制限を考慮して取引をバッチ分割する。
   const buildBatches = (items, size) => {
     if (size <= 0) {
       return [items];
@@ -2002,6 +2137,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     );
   };
 
+  // background側へバッチ解析を依頼する。
   const sendGeminiBatch = (payload) =>
     new Promise((resolve, reject) => {
       let settled = false;
@@ -2025,6 +2161,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       });
     });
 
+  // バッチごとに進捗を更新しながらGemini解析を実行する。
   const processGeminiBatches = async ({
     batches,
     batchSize,
@@ -2037,6 +2174,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     onError,
   }) => {
     for (let i = 0; i < batches.length; i += 1) {
+      // UIは逐次更新し、ユーザーが待ち時間を把握できるようにする。
       onProgress?.(
         i + 1,
         batches.length,
@@ -2052,6 +2190,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       // eslint-disable-next-line no-await-in-loop
       const result = await sendGeminiBatch(payload).catch((error) => error);
       if (result instanceof Error) {
+        // 1件でも失敗したら中断してユーザーに知らせる。
         onProgress?.(i + 1, batches.length, 0, {
           error: true,
           errorMessage: "Gemini解析に失敗しました",
@@ -2066,6 +2205,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   // 初回実行 & DOM変化時に実行をデバウンスする共通ヘルパー
+  // DOM差し替えが多いページなのでデバウンスで負荷を抑える。
   const createDebouncedRunner = (fn, delayMs = 200) => {
     let pending = null;
     return () => {
@@ -2093,12 +2233,14 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const scheduleCategoryCheck = createDebouncedRunner(runCategoryRuleAlert);
   const scheduleSatisfaction = createDebouncedRunner(runSatisfaction);
 
+  // 初期ロード時に主要機能を順に実行する。
   scheduleInit();
   scheduleSatisfaction();
   scheduleRunGemini();
   scheduleDuplicateCheck();
   scheduleCategoryCheck();
 
+  // プロフィール画面: 並び替えUIの監視。
   if (isProfileRulePage()) {
     scheduleLargeCategorySorting();
     const largeCategoryObserver = new MutationObserver(() =>
@@ -2110,6 +2252,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     });
   }
 
+  // /cf画面: カテゴリメニューの描画遅延に追随する。
   if (isCfPage()) {
     scheduleCfLargeCategoryOrdering();
     document.addEventListener("click", (event) => {
@@ -2130,6 +2273,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     cfMenuObserver.observe(document.body, { childList: true, subtree: true });
   }
 
+  // 各機能は独立した監視で必要時に再実行する。
   const geminiObserver = new MutationObserver(() => scheduleRunGemini());
   geminiObserver.observe(listBody, { childList: true, subtree: true });
 
@@ -2146,8 +2290,10 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   );
   satisfactionObserver.observe(listBody, { childList: true, subtree: true });
 
+  // 設定はsync/localどちらの変更でも再読み込みする。
   const isSettingsArea = (area) => area === "sync" || area === "local";
 
+  // 設定が変わったらキャッシュを捨て、必要な再描画を行う。
   const handleSettingsChange = () => {
     cachedSettings = null;
     cachedSettingsPromise = null;
@@ -2163,6 +2309,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
   };
 
+  // UI設定が変わったらマスク状態を即時反映する。
   const handleUiPrefsChange = (next) => {
     cachedUiPrefs = null;
     cachedUiPrefsPromise = null;
