@@ -1,10 +1,12 @@
 import { normalizeStoreName } from "./normalize.js";
 
+// 重複判定キー用のプレフィックス。
 const DUP_PREFIX = "dup:";
 
 const isEmpty = (value) =>
   value === null || value === undefined || value === "";
 
+// 「日付+店名+金額」が同一の取引を検出するためのキー生成。
 export const buildDuplicateKey = ({ date, store, amount }) => {
   if (
     isEmpty(date) ||
@@ -26,8 +28,10 @@ export const buildDuplicateKey = ({ date, store, amount }) => {
  * @param {Array<{id:string,date:string,store:string,amount:number}>} transactions
  */
 export const groupDuplicates = (transactions) => {
+  // 取引をキーでまとめ、2件以上あるものを重複候補として扱う。
   const byKey = new Map();
   for (const tx of transactions ?? []) {
+    // 不完全な行は対象外としてスキップする。
     if (!tx?.id) {
       continue;
     }

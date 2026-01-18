@@ -1,5 +1,7 @@
+// UI周りの軽量な設定は専用キーで管理する。
 const UI_PREFS_KEY = "mf_toolpack_ui_prefs";
 
+// 初期値は「機能ON・マスクON」を前提にする（スクショ対策）。
 const DEFAULT_UI_PREFS = {
   // 画面マスキング機能はデフォルトON（設定で機能自体をOFFにできる）
   maskingFeatureEnabled: true,
@@ -7,11 +9,13 @@ const DEFAULT_UI_PREFS = {
   maskingEnabled: true,
 };
 
+// options/popupなど複数の実行環境で同じ判定を使えるようにする。
 const hasChromeStorage = () =>
   typeof globalThis.chrome !== "undefined" &&
   globalThis.chrome?.storage?.sync &&
   globalThis.chrome?.storage?.local;
 
+// chrome.storageのコールバックAPIをPromise化するヘルパー。
 const promisify = (fn) =>
   new Promise((resolve, reject) => {
     try {
@@ -43,15 +47,18 @@ const setLocal = async (value) =>
 const isPlainObject = (value) =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
+// 欠けているキーを補い、常に完全な設定として扱う。
 const normalizeUiPrefs = (prefs) => ({
   ...DEFAULT_UI_PREFS,
   ...(isPlainObject(prefs) ? prefs : {}),
 });
 
+// sync優先・localフォールバックでUI設定を読み出す。
 export const loadUiPrefs = async () => {
   if (!hasChromeStorage()) {
     throw new Error("chrome.storage is unavailable in this context");
   }
+  // syncが使えない/空の場合はlocalへフォールバックする。
   const sync = await getSync(UI_PREFS_KEY).catch(() => null);
   const fromSync = sync?.[UI_PREFS_KEY];
   if (isPlainObject(fromSync)) {
@@ -72,6 +79,7 @@ export const loadUiPrefs = async () => {
  * - 将来キーが増えても破壊しないよう、既存値とマージして保存する
  */
 export const saveUiPrefsPatch = async (patch) => {
+  // UI設定は部分更新が多いため、パッチをマージして保存する。
   if (!hasChromeStorage()) {
     throw new Error("chrome.storage is unavailable in this context");
   }

@@ -10,13 +10,16 @@ import {
   parseMonthFromHeader,
 } from "./downloader-utils.js";
 
+// GeminiのAPIタイムアウトとUI周りはここで一括管理する。
 const TIMEOUT_MS = 60_000;
 const MENU_ID = "mf-download-visible-month";
 const BADGE_CLEAR_DELAY = 2800;
+// ダウンロード名はイベント順のズレを吸収するためキューで保持する。
 const pendingDownloadNames = [];
 let badgeResetHandle = 0;
 let downloadContextMenuEnabled = true;
 
+// Geminiに渡す最小限のプロンプトを組み立てる（ラベル値は返させない）。
 const buildPrompt = (month, transactions) => {
   const instruction = [
     "You are an assistant that flags potential subscription transactions.",
@@ -34,6 +37,7 @@ const buildPrompt = (month, transactions) => {
   };
 };
 
+// Geminiの応答はフォーマット揺れがあるため、文字列→JSONを安全に抽出する。
 const extractJson = (data) => {
   const text =
     data?.candidates?.[0]?.content?.parts?.[0]?.text ??
@@ -50,6 +54,7 @@ const extractJson = (data) => {
   return parsed;
 };
 
+// バッジは短時間で自動クリアする運用にして、誤操作を防ぐ。
 const setBadge = async (text, color) => {
   if (!chrome?.action) {
     return;
@@ -68,6 +73,7 @@ const setBadge = async (text, color) => {
   }, BADGE_CLEAR_DELAY);
 };
 
+// 対象タブのヘッダーから「年月」を拾う。複数フレームを横断して探索する。
 const extractHeaderFromTab = async (tabId) => {
   try {
     const results = await chrome.scripting.executeScript({
@@ -99,7 +105,9 @@ const extractHeaderFromTab = async (tabId) => {
   }
 };
 
+// ページ側のセッションを使うため、タブ内コンテキストでCSVを取得する。
 const fetchCsvViaPage = async (tabId, requestUrl) => {
+  // Cookie付きのCSV取得はページコンテキストで実行する必要がある。
   try {
     const [result] = await chrome.scripting.executeScript({
       target: { tabId },
@@ -117,6 +125,7 @@ const fetchCsvViaPage = async (tabId, requestUrl) => {
           const bytes = new Uint8Array(arrayBuffer);
           let binary = "";
           const chunkSize = 0x80_00;
+          // data: URL 化のためにバイナリ文字列へ分割変換する。
           for (let offset = 0; offset < bytes.length; offset += chunkSize) {
             const chunk = bytes.subarray(offset, offset + chunkSize);
             binary += String.fromCharCode(...chunk);
@@ -136,6 +145,7 @@ const fetchCsvViaPage = async (tabId, requestUrl) => {
   }
 };
 
+// CSVの取得→ダウンロード→バッジ表示までをまとめて扱う。
 const triggerCsvDownload = async (tabId, parsed) => {
   const requestUrl = buildCsvRequestUrl(parsed);
   const result = await fetchCsvViaPage(tabId, requestUrl);
@@ -157,6 +167,7 @@ const triggerCsvDownload = async (tabId, parsed) => {
   }
 };
 
+// コンテキストメニュー実行時のメインハンドラ。
 const handleContextClick = async (info, tab) => {
   if (info.menuItemId !== MENU_ID || !downloadContextMenuEnabled) {
     return;
@@ -179,6 +190,7 @@ const handleContextClick = async (info, tab) => {
   await triggerCsvDownload(tabId, parsed);
 };
 
+// メニュー登録は背景SWが複数起動しても壊れないように冪等化する。
 const createContextMenu = () =>
   new Promise((resolve) => {
     chrome.contextMenus.create(
@@ -198,6 +210,7 @@ const createContextMenu = () =>
     );
   });
 
+// 不要なメニューを確実に外す（存在しない場合は無視）。
 const removeContextMenu = () =>
   new Promise((resolve) => {
     chrome.contextMenus.remove(MENU_ID, () => {
@@ -209,9 +222,10 @@ const removeContextMenu = () =>
     });
   });
 
-// Serialize menu rebuilds to avoid duplicate-id errors when multiple triggers fire in quick succession.
+// 複数のトリガーでメニュー再構築が走るため、直列化して重複IDを避ける。
 let refreshContextMenuChain = Promise.resolve();
 
+// 設定反映の一連処理を直列化しつつ、メニューのON/OFFを切り替える。
 const refreshContextMenu = (enabled) => {
   refreshContextMenuChain = refreshContextMenuChain
     .catch(() => {
@@ -227,6 +241,7 @@ const refreshContextMenu = (enabled) => {
   return refreshContextMenuChain;
 };
 
+// ストレージから現在のトグル状態を読み、メニュー表示に反映する。
 const syncDownloaderToggle = async () => {
   try {
     const result = await loadSettings();
@@ -240,6 +255,7 @@ const syncDownloaderToggle = async () => {
 };
 
 chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
+  // ダウンロード開始時にキューから次のファイル名を割り当てる。
   const nextName = dequeueNextFilename(
     pendingDownloadNames,
     item,
@@ -254,6 +270,7 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "requestGeminiAnalysis") {
+    // コンテント側の要求を受け、Gemini APIを背景で実行する。
     (async () => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort("timeout"), TIMEOUT_MS);
@@ -308,6 +325,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
+// 各種イベントハンドラはここで集約して登録する。
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   handleContextClick(info, tab).catch(() => {
     /* ignore */

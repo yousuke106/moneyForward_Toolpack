@@ -10,6 +10,7 @@ import {
   saveUiPrefsPatch,
 } from "../data/ui-prefs.js";
 
+// 画面上の参照要素をまとめて取得しておく。
 const apiKeyInput = document.getElementById("apiKey");
 const toggleApiKey = document.getElementById("toggleApiKey");
 const thresholdInput = document.getElementById("threshold");
@@ -56,6 +57,7 @@ const categoryExportBtn = document.getElementById("categoryExportBtn");
 const categoryImportBtn = document.getElementById("categoryImportBtn");
 const categoryImportInput = document.getElementById("categoryImportInput");
 
+// モデル/閾値などの初期値・選択肢はここで集中管理する。
 const CUSTOM_MODEL_VALUE = "__custom__";
 const DEFAULT_THRESHOLD = 70;
 const DEFAULT_MODEL = "gemini-2.5-flash";
@@ -81,6 +83,7 @@ const MODEL_OPTIONS = [
   { value: "gemini-1.5-flash-latest", label: "Gemini 1.5 Flash（互換用）" },
 ];
 
+// CSVインポート/エクスポート関連の制約。
 const MAX_IMPORT_BYTES = 200 * 1024;
 const CSV_HEADER = ["mode", "large", "middle"];
 const CSV_NEEDS_QUOTE_REGEX = /[",\n]/;
@@ -88,36 +91,44 @@ const CSV_NEEDS_QUOTE_REGEX = /[",\n]/;
 let categoryRules = { whitelist: [], blacklist: [] };
 let currentCategoryTab = "whitelist";
 
+// 画面右上のステータス表示を統一的に更新する。
 const renderStatus = (message, isError = false) => {
   statusEl.textContent = message;
   statusEl.style.color = isError ? "#b00020" : "#00695c";
 };
 
+// カスタムモデル入力欄の表示/非表示を切り替える。
 const toggleCustomModel = (value) => {
   const isCustom = value === CUSTOM_MODEL_VALUE;
   customModelWrapper.classList.toggle("hidden", !isCustom);
 };
 
+// APIキーの表示/非表示はtype属性で切り替える。
 toggleApiKey?.addEventListener("change", () => {
   apiKeyInput.type = toggleApiKey.checked ? "text" : "password";
 });
 
+// バリデーション時の表示は毎回リセットする。
 const clearErrors = () => {
   apiKeyErrorEl.textContent = "";
   thresholdErrorEl.textContent = "";
   customModelError.textContent = "";
 };
 
+// 保存ボタンの活性/非活性とエラーメッセージをまとめて制御する。
 const validate = () => {
+  // 入力チェックは即時に行い、保存ボタンの誤操作を防ぐ。
   clearErrors();
   let valid = true;
 
+  // APIキーは空欄不可。保存直前に空欄なら即エラーにする。
   const apiKey = apiKeyInput.value.trim();
   if (!apiKey) {
     apiKeyErrorEl.textContent = "APIキーを入力してください。";
     valid = false;
   }
 
+  // 閾値は整数のみ受け付ける（Geminiスコアの仕様に合わせる）。
   const thresholdRaw = thresholdInput.value;
   const threshold = Number(thresholdRaw);
   const isInteger = Number.isInteger(threshold);
@@ -132,6 +143,7 @@ const validate = () => {
     valid = false;
   }
 
+  // カスタムモデルは入力必須のため、個別に検証する。
   const modelValue = modelSelect.value;
   if (modelValue === CUSTOM_MODEL_VALUE) {
     const customValue = customModelInput.value.trim();
@@ -141,6 +153,7 @@ const validate = () => {
     }
   }
 
+  // ここでボタン活性を切り替え、状態と整合させる。
   saveBtn.disabled = !valid;
   const resolvedModel =
     modelValue === CUSTOM_MODEL_VALUE
@@ -166,6 +179,7 @@ const validate = () => {
   };
 };
 
+// UI状態と保存済み設定を踏まえた最終モデルIDを解決する。
 const resolveModelValue = (loadedModel) => {
   const modelValue = modelSelect.value;
   if (modelValue === CUSTOM_MODEL_VALUE) {
@@ -181,6 +195,7 @@ const resolveModelValue = (loadedModel) => {
   return modelValue || loadedModel || DEFAULT_MODEL;
 };
 
+// 設定のトグル値をUIに反映する。
 const applyFeatureToggles = (settings) => {
   const geminiEnabled = settings.featureFlags?.geminiAnalysisEnabled ?? true;
   const duplicateEnabled = settings.featureFlags?.duplicateCheckEnabled ?? true;
@@ -217,6 +232,7 @@ const applyFeatureToggles = (settings) => {
   }
 };
 
+// UI用の軽量設定（画面マスク等）を反映する。
 const applyUiPrefs = (prefs) => {
   const maskingFeatureEnabled =
     prefs?.maskingFeatureEnabled ?? DEFAULT_UI_PREFS.maskingFeatureEnabled;
@@ -225,6 +241,7 @@ const applyUiPrefs = (prefs) => {
   }
 };
 
+// ルール一覧はタブの状態も含めてまとめて更新する。
 const applyCategoryRules = (settings) => {
   categoryRules = {
     whitelist: settings.categoryRules?.whitelist ?? [],
@@ -233,6 +250,7 @@ const applyCategoryRules = (settings) => {
   renderCategoryTab(currentCategoryTab);
 };
 
+// 入力中の値と保存済み設定を合成して保存用スナップショットを作る。
 const buildSettingsSnapshot = ({
   geminiEnabled,
   duplicateEnabled,
@@ -243,12 +261,14 @@ const buildSettingsSnapshot = ({
   largeCategoryOrderEnabled,
   loadedSettings = {},
 }) => {
+  // 入力欄が空でも、保存済み値があればそれを使う。
   const apiKeyFallback = loadedSettings.geminiApiKey ?? "";
   const thresholdFallback =
     typeof loadedSettings.scoreThreshold === "number"
       ? loadedSettings.scoreThreshold
       : DEFAULT_THRESHOLD;
 
+  // 型変換に失敗しても既存値へフォールバックする。
   const thresholdRaw = thresholdInput.value;
   const thresholdNumber = Number(thresholdRaw);
   const threshold = Number.isFinite(thresholdNumber)
@@ -257,6 +277,7 @@ const buildSettingsSnapshot = ({
 
   const resolvedModel = resolveModelValue(loadedSettings.model);
 
+  // ルールは現在のUI状態を優先する。
   const resolvedCategoryRules = {
     whitelist: categoryRules.whitelist ?? [],
     blacklist: categoryRules.blacklist ?? [],
@@ -284,6 +305,7 @@ const buildSettingsSnapshot = ({
   };
 };
 
+// 並び替えUIの表示状態を設定に合わせる。
 const applyLargeCategoryOrderUi = (settings) => {
   if (largeCategoryOrderToggle) {
     largeCategoryOrderToggle.checked =
@@ -297,6 +319,7 @@ const applyLargeCategoryOrderUi = (settings) => {
   }
 };
 
+// カテゴリ入力用のエラーメッセージを表示/非表示する。
 const setCategoryError = (message) => {
   if (!categoryError) {
     return;
@@ -305,12 +328,15 @@ const setCategoryError = (message) => {
   categoryError.style.display = message ? "block" : "none";
 };
 
+// CSVは依存を増やさず最小実装で解析する（ダブルクォート対応）。
 const parseCsv = (text) => {
+  // 簡易CSVパーサーで依存を増やさない方針。
   const rows = [];
   let current = [];
   let field = "";
   let inQuote = false;
   for (let i = 0; i < text.length; i += 1) {
+    // ダブルクォート内はカンマ/改行をそのまま値として扱う。
     const ch = text[i];
     const next = text[i + 1];
     if (inQuote) {
@@ -343,9 +369,11 @@ const parseCsv = (text) => {
   return rows;
 };
 
+// ExcelなどのBOM付きCSVを吸収するための処理。
 const stripBom = (text) =>
   text.charCodeAt(0) === 0xfe_ff ? text.slice(1) : text;
 
+// CSVの1行を正しくエスケープして出力する。
 const buildCsvLine = (values) =>
   values
     .map((v) => {
@@ -357,6 +385,7 @@ const buildCsvLine = (values) =>
     })
     .join(",");
 
+// ルール一覧をCSV文字列に変換する。
 const buildCategoryCsv = (rules) => {
   const lines = [buildCsvLine(CSV_HEADER)];
   const pushMode = (mode, list = []) => {
@@ -369,8 +398,10 @@ const buildCategoryCsv = (rules) => {
   return lines.join("\n");
 };
 
+// CSVを取り込み、既存ルールへマージする（重複は上書き）。
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 入力検証とマージを一括で実施
 const applyImportedRules = ({ rows }) => {
+  // 取り込みは重複上書き、空行は無視の方針で統一。
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new Error("CSVにデータがありません");
   }
@@ -387,6 +418,7 @@ const applyImportedRules = ({ rows }) => {
     throw new Error("ヘッダは mode,large,middle である必要があります");
   }
 
+  // 既存ルールをMap化して上書きしやすくする。
   const mapWhitelist = new Map(
     (categoryRules.whitelist ?? []).map((item) => [
       buildRuleKey(item),
@@ -404,6 +436,7 @@ const applyImportedRules = ({ rows }) => {
   let updated = 0;
 
   for (const row of data) {
+    // 空行は飛ばし、必要列が欠けていたら即エラーで中断する。
     if (!row || row.length === 0 || row.every((c) => !(c && `${c}`.trim()))) {
       continue;
     }
@@ -429,6 +462,7 @@ const applyImportedRules = ({ rows }) => {
     targetMap.set(key, { large: largeDisplay, middle: middleDisplay });
   }
 
+  // Mapから配列に戻してUI/保存形式に揃える。
   const mergedWhitelist = [...mapWhitelist.values()];
   const mergedBlacklist = [...mapBlacklist.values()];
   const totalCount = mergedWhitelist.length + mergedBlacklist.length;
@@ -442,6 +476,7 @@ const applyImportedRules = ({ rows }) => {
   renderCategoryList();
   return { added, updated, total: totalCount };
 };
+// タブ切り替え時に表示対象を更新する。
 const renderCategoryTab = (tab) => {
   currentCategoryTab = tab;
   const isWhitelist = tab === "whitelist";
@@ -450,6 +485,7 @@ const renderCategoryTab = (tab) => {
   renderCategoryList();
 };
 
+// 現在のタブに応じたルール一覧を描画する。
 const renderCategoryList = () => {
   if (!categoryList) {
     return;
@@ -486,7 +522,9 @@ const renderCategoryList = () => {
   });
 };
 
+// カテゴリルールの保存は個別トグルと同様に即時反映する。
 const persistCategoryRules = async () => {
+  // ルール保存はトグル保存と同様に即時反映する。
   const loaded = await loadSettings();
   const baseSettings = loaded?.settings ?? {
     geminiApiKey: apiKeyInput.value.trim(),
@@ -521,6 +559,7 @@ const persistCategoryRules = async () => {
   renderStatus(`ルールを保存しました: ${areaLabel}${reason}`);
 };
 
+// ルール追加は正規化→重複判定→保存までを一括で行う。
 const addCategoryRule = async () => {
   setCategoryError("");
   const largeRaw = categoryLargeInput?.value ?? "";
@@ -557,7 +596,9 @@ const addCategoryRule = async () => {
   }
 };
 
+// ブラウザ標準のダウンロードでCSVをエクスポートする。
 const exportCategoryRules = () => {
+  // URL.createObjectURLは必ずrevokeしてメモリリークを防ぐ。
   try {
     const csv = buildCategoryCsv(categoryRules);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -573,8 +614,10 @@ const exportCategoryRules = () => {
   }
 };
 
+// CSVインポートの読み込み/検証/保存をひとつのPromiseで扱う。
 const handleImportFile = (file) =>
   new Promise((resolve, reject) => {
+    // ファイル選択やサイズ制限はここでチェックして早期に返す。
     if (!file) {
       reject(new Error("ファイルが選択されていません"));
       return;
@@ -612,7 +655,9 @@ const handleImportFile = (file) =>
     reader.readAsText(file, "utf-8");
   });
 
+// 保存済み設定をUIに反映する（モデル選択は存在可否で分岐）。
 const applySettingsToUi = (settings, area) => {
+  // 既存設定に無いモデルはカスタム扱いに切り替える。
   if (settings.geminiApiKey) {
     apiKeyInput.value = settings.geminiApiKey;
   }
@@ -638,7 +683,9 @@ const applySettingsToUi = (settings, area) => {
   renderStatus(`ロード元: ${area === "sync" ? "sync" : "local"}`);
 };
 
+// 初期ロードはUI設定→保存設定の順で読み込み、画面状態を整える。
 const load = async () => {
+  // UI設定→拡張設定の順で読み込むと表示が安定する。
   const prefs = await loadUiPrefs().catch(() => DEFAULT_UI_PREFS);
   applyUiPrefs(prefs);
 
@@ -681,6 +728,7 @@ const load = async () => {
   applySettingsToUi(settings, area);
   validate();
 };
+// 保存ボタンはAPIキー/閾値/モデルだけを明示保存する。
 const onSave = async () => {
   const {
     valid,
@@ -716,6 +764,7 @@ const onSave = async () => {
   renderStatus(`保存しました: ${areaLabel}${reason}`);
 };
 
+// 以降はUIイベントの配線（設定変更は即時保存）。
 saveBtn.addEventListener("click", () => {
   onSave().catch((error) =>
     renderStatus(`保存に失敗しました: ${error.message}`, true)

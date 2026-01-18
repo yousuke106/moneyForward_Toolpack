@@ -1,3 +1,4 @@
+/* Geminiやラベル設定によるハイライト */
 .mf-sub-highlight {
   background-color: rgba(255, 255, 0, 0.25);
   transition: background-color 120ms ease-in-out;
@@ -7,6 +8,7 @@
   background-color: rgba(255, 255, 0, 0.25) !important;
 }
 
+/* 同日・同内容・同額の重複候補を強調 */
 .mf-sub-duplicate {
   background-color: rgba(240, 140, 0, 0.2);
   border-left: 4px solid #f08c00;
@@ -27,6 +29,7 @@
   border-left: 4px solid #f08c00;
 }
 
+/* カテゴリルール違反の警告表示 */
 .mf-sub-category-alert-row {
   border-left: 4px solid #e8574c;
   transition:
@@ -38,6 +41,7 @@
   background-color: rgba(232, 87, 76, 0.22) !important;
 }
 
+/* サブスクラベル/満足度のセレクト共通スタイル */
 .mf-sub-select,
 .mf-sat-select {
   font-family:
@@ -77,6 +81,7 @@
   -webkit-appearance: none;
 }
 
+/* ラベル列の幅を確保してレイアウト崩れを防ぐ */
 .mf-sub-label-cell {
   min-width: 90px;
   width: 1%;
@@ -87,6 +92,7 @@
   width: 100%;
 }
 
+/* 満足度メモ入力欄の視認性を優先 */
 .mf-sat-note {
   width: 100%;
   min-width: 90px;
@@ -200,6 +206,7 @@
   }
 }
 
+/* 大項目並び替え用のハンドル */
 .mf-lc-dnd-handle {
   display: inline-flex;
   align-items: center;
@@ -217,6 +224,7 @@
   line-height: 1;
 }
 
+/* 並び替え時にハンドルとリンクを横並びに配置 */
 .mf-lc-dnd-item {
   display: flex;
   align-items: center;
@@ -240,6 +248,7 @@
   user-select: none;
 }
 
+/* /cf のカテゴリメニュー再描画中は一時的に隠す */
 .mf-lc-menu-pending .dropdown-menu.main_menu.minus {
   visibility: hidden;
 }
