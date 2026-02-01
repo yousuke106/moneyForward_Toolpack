@@ -1,8 +1,11 @@
 import { validateCategoryRules } from "./category-rules.js";
+import {
+  DEFAULT_MODEL,
+  DEFAULT_THRESHOLD,
+  SYNC_THRESHOLD_BYTES,
+  SYNC_TOTAL_LIMIT_BYTES,
+} from "./settings-constants.js";
 
-// sync領域の上限に近づいた場合はlocalへフォールバックする。
-const SYNC_THRESHOLD_BYTES = 90 * 1024;
-const SYNC_TOTAL_LIMIT_BYTES = 100 * 1024;
 const SETTINGS_KEY = "settings";
 
 // 機能トグルは安全側（有効）をデフォルトにする。
@@ -24,8 +27,8 @@ const DEFAULT_CATEGORY_RULES = {
 // 初期設定はUIの初期表示とも同期させる。
 const DEFAULT_SETTINGS = {
   geminiApiKey: "",
-  scoreThreshold: 70,
-  model: "gemini-2.5-flash",
+  scoreThreshold: DEFAULT_THRESHOLD,
+  model: DEFAULT_MODEL,
   featureFlags: DEFAULT_FEATURE_FLAGS,
   categoryRules: DEFAULT_CATEGORY_RULES,
   // Keep saved order while allowing users to temporarily disable sorting.

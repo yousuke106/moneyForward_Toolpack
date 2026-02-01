@@ -8,6 +8,7 @@ import {
   isDownloaderEnabled,
   parseMonthFromHeader,
 } from "./downloader-utils.js";
+import { extractJson } from "./gemini-utils.js";
 
 // GeminiのAPIタイムアウトとUI周りはここで一括管理する。
 const TIMEOUT_MS = 60_000;
@@ -32,23 +33,6 @@ const buildPrompt = (month, transactions) => {
       },
     ],
   };
-};
-
-// Geminiの応答はフォーマット揺れがあるため、文字列→JSONを安全に抽出する。
-const extractJson = (data) => {
-  const text =
-    data?.candidates?.[0]?.content?.parts?.[0]?.text ??
-    data?.candidates?.[0]?.output ??
-    "";
-  if (!text) {
-    throw new Error("Empty Gemini response");
-  }
-  const cleaned = text.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(cleaned);
-  if (!parsed.results) {
-    throw new Error("Missing results field in Gemini response");
-  }
-  return parsed;
 };
 
 // バッジは短時間で自動クリアする運用にして、誤操作を防ぐ。
@@ -265,14 +249,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
         const body = buildPrompt(month, transactions);
 
-        // debug log
-        // eslint-disable-next-line no-console
-        console.log("[mf-sub][bg] request gemini", {
-          model,
-          count: transactions?.length ?? 0,
-          month,
-        });
-
         const res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
           {
@@ -287,8 +263,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             keepalive: true,
           }
         );
-        // eslint-disable-next-line no-console
-        console.log("[mf-sub][bg] response status", res.status);
         if (!res.ok) {
           throw new Error(`Gemini API error: ${res.status}`);
         }
@@ -296,8 +270,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const parsed = extractJson(data);
         sendResponse({ ok: true, data: parsed });
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn("[mf-sub][bg] gemini error", error);
         sendResponse({ ok: false, error: error?.message ?? String(error) });
       } finally {
         clearTimeout(timer);

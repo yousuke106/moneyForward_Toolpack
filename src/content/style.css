@@ -200,6 +200,26 @@
   gap: 10px;
 }
 
+/* 保存失敗のトースト通知 */
+.mf-tp-toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 99999;
+  max-width: 240px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(20, 20, 20, 0.92);
+  color: #f8fafc;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.mf-tp-toast--error {
+  background: rgba(185, 28, 28, 0.94);
+}
+
 @keyframes mf-sub-spin {
   to {
     transform: rotate(360deg);

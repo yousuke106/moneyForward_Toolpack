@@ -2,6 +2,8 @@
 
 // 金額文字列から数値を抜き出すための正規表現。
 const AMOUNT_REGEX = /[-+−]?\d[\d,]*/u;
+// data-table-sortable-value から日付を取り出すための正規表現。
+const SORTABLE_DATE_REGEX = /\d{4}[/-]\d{2}[/-]\d{2}/;
 
 // マイナス表記の先頭判定に使う（支出判定）。
 const NEGATIVE_HEAD_REGEX = /^[-−]/u;
@@ -73,12 +75,12 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const CATEGORY_ALERT_ROW_CLASS = "mf-sub-category-alert-row";
   const CATEGORY_ALERT_CELL_CLASS = "mf-sub-category-alert-cell";
   const SESSION_FLAG_PREFIX = "mf_subs_checked_";
-  // 画面共有/スクショ対策として、内容/金額をCSSのblurでマスクする（DOM改変を最小化して壊れにくくする）
   const UI_PREFS_KEY = "mf_toolpack_ui_prefs";
   const DEFAULT_UI_PREFS = {
     maskingFeatureEnabled: true,
     maskingEnabled: true,
   };
+  // 画面共有/スクショ対策として、内容/金額をCSSのblurでマスクする。
   const LARGE_CATEGORY_ORDER_VERSION = 1;
   const LARGE_CATEGORY_SORTING_KEY = "largeCategoryOrder";
   const LARGE_CATEGORY_SORTING_ENABLED_KEY = "largeCategoryOrderEnabled";
@@ -102,8 +104,13 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const MASKING_ROOT_CLASS = "mf-tp-mask-on";
   const MASKING_TARGET_CLASS = "mf-tp-mask-target";
   const MASKING_TOGGLE_ID = "mf-tp-mask-toggle";
+  const SAVE_ERROR_TOAST_ID = "mf-tp-save-error";
+  const SAVE_ERROR_TOAST_DURATION_MS = 4000;
+  const SAVE_ERROR_THROTTLE_MS = 3000;
   const DEFAULT_THRESHOLD = 70;
   const DEFAULT_MODEL = "gemini-2.5-flash";
+  const SYNC_THRESHOLD_BYTES = 90 * 1024;
+  const SYNC_TOTAL_LIMIT_BYTES = 100 * 1024;
   // Gemini対象外とする固定ワードは業務要件ベースで明示的に除外する。
   const EXCLUDE_KEYWORDS = ["振替", "投資積立", "住宅ローン", "固定費"];
   // 設定値は頻繁に参照するためメモリにキャッシュする。
@@ -111,11 +118,39 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   let cachedSettingsPromise = null;
   let cachedUiPrefs = null;
   let cachedUiPrefsPromise = null;
+  let saveErrorToastTimer = 0;
+  let lastSaveErrorAt = 0;
   const log = (...args) => {
     if (getSessionFlag("mf_subs_debug") === "true" || isDev) {
       // eslint-disable-next-line no-console
       console.log("[mf-sub]", ...args);
     }
+  };
+
+  // 保存失敗時は控えめな通知を表示し、ユーザーに気づけるようにする。
+  const showSaveErrorToast = (message = "保存に失敗しました") => {
+    const now = Date.now();
+    if (now - lastSaveErrorAt < SAVE_ERROR_THROTTLE_MS) {
+      return;
+    }
+    lastSaveErrorAt = now;
+    const existing = document.getElementById(SAVE_ERROR_TOAST_ID);
+    const toast = existing ?? document.createElement("div");
+    toast.id = SAVE_ERROR_TOAST_ID;
+    toast.className = "mf-tp-toast mf-tp-toast--error";
+    toast.setAttribute("role", "status");
+    toast.setAttribute("aria-live", "polite");
+    toast.textContent = message;
+    if (!existing) {
+      document.body.append(toast);
+    }
+    if (saveErrorToastTimer) {
+      clearTimeout(saveErrorToastTimer);
+    }
+    saveErrorToastTimer = setTimeout(() => {
+      toast.remove();
+      saveErrorToastTimer = 0;
+    }, SAVE_ERROR_TOAST_DURATION_MS);
   };
 
   // 店名は空白・絵文字を除去して比較用に正規化する。
@@ -258,11 +293,15 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     const sortable = row
       .querySelector("td.date")
       ?.getAttribute("data-table-sortable-value");
-    if (sortable?.includes("-")) {
-      const [ymd] = sortable.split("-");
-      return ymd.replace(/\//g, "-");
+    if (!sortable) {
+      return "";
     }
-    return "";
+    // 先頭に含まれる日付文字列を抜き出して正規化する。
+    const match = sortable.match(SORTABLE_DATE_REGEX);
+    if (!match) {
+      return "";
+    }
+    return match[0].replace(/\//g, "-");
   };
 
   // chrome.storage が無効な環境でも落ちないように安全に読む。
@@ -281,19 +320,26 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       }
     });
 
-  // 失敗時もアプリ全体は継続させるため、例外を握りつぶす。
+  // 失敗時もアプリ全体は継続させるため、結果のみ返して通知判断は呼び出し側に委ねる。
   const safeStorageSet = (area, payload) =>
     new Promise((resolve) => {
       // 書き込み失敗が致命的にならない用途向け。
       const store = chrome?.storage?.[area];
       if (!(chrome?.runtime?.id && store)) {
-        resolve();
+        resolve({ ok: false, reason: "unavailable" });
         return;
       }
       try {
-        store.set(payload, resolve);
-      } catch (_error) {
-        resolve();
+        store.set(payload, () => {
+          const error = chrome?.runtime?.lastError;
+          if (error) {
+            resolve({ ok: false, reason: "runtime_error", error });
+            return;
+          }
+          resolve({ ok: true });
+        });
+      } catch (error) {
+        resolve({ ok: false, reason: "exception", error });
       }
     });
 
@@ -381,8 +427,11 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     const next = { ...current, ...(patch ?? {}) };
     const payload = { [UI_PREFS_KEY]: next };
     // sync が使えない/失敗する環境でも継続できるよう、local にも同内容を保存する
-    await safeStorageSet("sync", payload);
-    await safeStorageSet("local", payload);
+    const syncResult = await safeStorageSet("sync", payload);
+    const localResult = await safeStorageSet("local", payload);
+    if (!(syncResult.ok || localResult.ok)) {
+      showSaveErrorToast();
+    }
     cachedUiPrefs = next;
   };
 
@@ -408,10 +457,13 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       delete labelsByTxId[txKey];
       delete labelsByStoreAmount[storeAmountKey];
     }
-    await safeStorageSet("local", {
+    const result = await safeStorageSet("local", {
       labelsByTxId,
       labelsByStoreAmount,
     });
+    if (!result.ok) {
+      showSaveErrorToast();
+    }
   };
 
   // 満足度は取引IDと店名+日付の2系統で保存する。
@@ -443,7 +495,10 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     };
     upsert(maps.satisfactionByTxId, txKey);
     upsert(maps.satisfactionByStoreDate, sdKey);
-    await safeStorageSet("local", maps);
+    const result = await safeStorageSet("local", maps);
+    if (!result.ok) {
+      showSaveErrorToast();
+    }
   };
 
   // DOMから取引に紐づく情報を取り出す小さなヘルパー群。
@@ -1142,9 +1197,8 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       }
     }
 
-    if (isDev && missingMemo > 0) {
-      // eslint-disable-next-line no-console
-      console.warn(`[mf-sub] memo cell not found in ${missingMemo} row(s)`);
+    if (missingMemo > 0) {
+      log("memo cell not found", { missingMemo });
     }
   };
 
@@ -1248,8 +1302,6 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   // options画面と同じ容量判定ロジックで保存先を決める。
   const saveSettingsWithFallback = async (nextSettings) => {
     // sync容量が厳しい場合はlocalに逃がして保存失敗を防ぐ。
-    const SYNC_THRESHOLD_BYTES = 90 * 1024;
-    const SYNC_TOTAL_LIMIT_BYTES = 100 * 1024;
     const bytes = await getSyncBytesInUse().catch(() => SYNC_TOTAL_LIMIT_BYTES);
     if (bytes >= SYNC_THRESHOLD_BYTES) {
       await setStorageWithError("local", { settings: nextSettings });

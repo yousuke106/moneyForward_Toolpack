@@ -3,6 +3,10 @@ import {
   MAX_CATEGORY_RULES,
   normalizeCategory,
 } from "../data/category-rules.js";
+import {
+  DEFAULT_MODEL,
+  DEFAULT_THRESHOLD,
+} from "../data/settings-constants.js";
 import { loadSettings, saveSettingsWithFallback } from "../data/storage.js";
 import {
   DEFAULT_UI_PREFS,
@@ -59,8 +63,6 @@ const categoryImportInput = document.getElementById("categoryImportInput");
 
 // モデル/閾値などの初期値・選択肢はここで集中管理する。
 const CUSTOM_MODEL_VALUE = "__custom__";
-const DEFAULT_THRESHOLD = 70;
-const DEFAULT_MODEL = "gemini-2.5-flash";
 const MODEL_OPTIONS = [
   { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash（推奨・高速）" },
   { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro（高精度）" },

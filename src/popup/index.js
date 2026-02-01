@@ -35,9 +35,7 @@ const syncToggleFromSettings = async () => {
     const enabled =
       result?.settings?.featureFlags?.geminiAnalysisEnabled ?? true;
     applyToggleState(enabled);
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.warn("[mf-sub][popup] failed to load settings", error);
+  } catch (_error) {
     applyToggleState(true);
   }
 };
