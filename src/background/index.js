@@ -168,7 +168,11 @@ const handleContextClick = async (info, tab) => {
   }
 
   const isoMonth = `${parsed.year}-${String(parsed.month).padStart(2, "0")}`;
-  await chrome.storage.sync.set({ mf_month_year: isoMonth });
+  try {
+    await chrome.storage.sync.set({ mf_month_year: isoMonth });
+  } catch {
+    // sync保存に失敗してもダウンロード処理は継続する。
+  }
   await triggerCsvDownload(tabId, parsed);
 };
 

@@ -70,7 +70,8 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     (globalThis.chrome?.runtime?.getManifest?.()?.version_name ?? "").includes(
       "dev"
     );
-  const HIGHLIGHT_CLASS = "mf-sub-highlight";
+  const MANUAL_HIGHLIGHT_CLASS = "mf-sub-highlight-manual";
+  const GEMINI_HIGHLIGHT_CLASS = "mf-sub-highlight-gemini";
   const DUPLICATE_CLASS = "mf-sub-duplicate";
   const CATEGORY_ALERT_ROW_CLASS = "mf-sub-category-alert-row";
   const CATEGORY_ALERT_CELL_CLASS = "mf-sub-category-alert-cell";
@@ -111,6 +112,8 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const DEFAULT_MODEL = "gemini-2.5-flash";
   const SYNC_THRESHOLD_BYTES = 90 * 1024;
   const SYNC_TOTAL_LIMIT_BYTES = 100 * 1024;
+  const SETTINGS_UPDATED_AT_KEY = "updatedAt";
+  const GEMINI_API_KEY_STORAGE_KEY = "geminiApiKey";
   // Gemini対象外とする固定ワードは業務要件ベースで明示的に除外する。
   const EXCLUDE_KEYWORDS = ["振替", "投資積立", "住宅ローン", "固定費"];
   // 設定値は頻繁に参照するためメモリにキャッシュする。
@@ -982,6 +985,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       const cell = row.querySelector(`td.${labelCellClass}`);
       cell?.remove();
       row.dataset[labelInjectedFlag] = "";
+      row.classList.remove(MANUAL_HIGHLIGHT_CLASS);
     }
   };
 
@@ -993,9 +997,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
     select.value = label ?? "";
     if (label) {
-      row.classList.add(HIGHLIGHT_CLASS);
+      row.classList.add(MANUAL_HIGHLIGHT_CLASS);
     } else {
-      row.classList.remove(HIGHLIGHT_CLASS);
+      row.classList.remove(MANUAL_HIGHLIGHT_CLASS);
     }
   };
 
@@ -1273,6 +1277,42 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   observer.observe(listBody, { childList: true, subtree: true });
 
   // Gemini 解析
+  // 保存時刻は number / ISO 文字列の両方を受け付ける。
+  const parseSettingsUpdatedAt = (settings) => {
+    const raw = settings?.[SETTINGS_UPDATED_AT_KEY];
+    if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+      return raw;
+    }
+    if (typeof raw === "string" && raw.trim()) {
+      const parsed = Date.parse(raw);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    return 0;
+  };
+
+  // sync/local の両方に設定がある場合は新しい方を採用する。
+  const pickLatestCachedSettings = ({ syncSettings, localSettings }) => {
+    if (syncSettings && !localSettings) {
+      return syncSettings;
+    }
+    if (localSettings && !syncSettings) {
+      return localSettings;
+    }
+    if (!(syncSettings && localSettings)) {
+      return {};
+    }
+
+    const syncUpdatedAt = parseSettingsUpdatedAt(syncSettings);
+    const localUpdatedAt = parseSettingsUpdatedAt(localSettings);
+    if (syncUpdatedAt !== localUpdatedAt) {
+      return localUpdatedAt > syncUpdatedAt ? localSettings : syncSettings;
+    }
+    // タイムスタンプ同値（旧形式含む）は local を優先する。
+    return localSettings;
+  };
+
   // 設定は頻繁に読むためキャッシュし、同時実行を抑制する。
   const loadSettings = async () => {
     // 連続読み込みはPromiseを共有し、二重取得を避ける。
@@ -1283,12 +1323,23 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       return cachedSettingsPromise;
     }
     cachedSettingsPromise = (async () => {
-      const syncRes = await safeStorageGet("sync", "settings", {});
-      if (syncRes?.settings) {
-        return syncRes.settings;
-      }
-      const localRes = await safeStorageGet("local", "settings", {});
-      return localRes?.settings ?? {};
+      const [syncRes, localRes, apiKeyRes] = await Promise.all([
+        safeStorageGet("sync", "settings", {}),
+        safeStorageGet("local", "settings", {}),
+        safeStorageGet("local", GEMINI_API_KEY_STORAGE_KEY, {}),
+      ]);
+      const merged = pickLatestCachedSettings({
+        syncSettings: syncRes?.settings ?? null,
+        localSettings: localRes?.settings ?? null,
+      });
+      const localApiKey = apiKeyRes?.[GEMINI_API_KEY_STORAGE_KEY];
+      return {
+        ...merged,
+        geminiApiKey:
+          typeof localApiKey === "string"
+            ? localApiKey
+            : (merged?.geminiApiKey ?? ""),
+      };
     })();
     try {
       cachedSettings = await cachedSettingsPromise;
@@ -1301,17 +1352,28 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   // options画面と同じ保存先判定（sync容量チェック）で設定を保存する。
   // options画面と同じ容量判定ロジックで保存先を決める。
   const saveSettingsWithFallback = async (nextSettings) => {
+    const geminiApiKey = nextSettings?.geminiApiKey ?? "";
+    await setStorageWithError("local", {
+      [GEMINI_API_KEY_STORAGE_KEY]: geminiApiKey,
+    });
+
+    const withUpdatedAt = {
+      ...nextSettings,
+      // APIキーはlocal専用に保存し、syncへは載せない。
+      geminiApiKey: "",
+      [SETTINGS_UPDATED_AT_KEY]: Date.now(),
+    };
     // sync容量が厳しい場合はlocalに逃がして保存失敗を防ぐ。
     const bytes = await getSyncBytesInUse().catch(() => SYNC_TOTAL_LIMIT_BYTES);
     if (bytes >= SYNC_THRESHOLD_BYTES) {
-      await setStorageWithError("local", { settings: nextSettings });
+      await setStorageWithError("local", { settings: withUpdatedAt });
       return { area: "local", reason: "sync_threshold" };
     }
     try {
-      await setStorageWithError("sync", { settings: nextSettings });
+      await setStorageWithError("sync", { settings: withUpdatedAt });
       return { area: "sync" };
     } catch (error) {
-      await setStorageWithError("local", { settings: nextSettings });
+      await setStorageWithError("local", { settings: withUpdatedAt });
       return { area: "local", reason: "sync_error", error };
     }
   };
@@ -2052,6 +2114,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   // Geminiスコアが閾値以上の行をハイライトする。
   const applyGeminiHighlight = (results, threshold) => {
     const rows = getTransactionRows();
+    for (const row of rows) {
+      row.classList.remove(GEMINI_HIGHLIGHT_CLASS);
+    }
     const scoreMap = new Map();
     if (Array.isArray(results)) {
       for (const item of results) {
@@ -2065,7 +2130,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       const txId = findTxId(row);
       const score = scoreMap.get(txId);
       if (typeof score === "number" && score >= threshold) {
-        row.classList.add(HIGHLIGHT_CLASS);
+        row.classList.add(GEMINI_HIGHLIGHT_CLASS);
       }
     }
   };

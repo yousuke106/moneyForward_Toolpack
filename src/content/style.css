@@ -1,10 +1,12 @@
-/* Geminiやラベル設定によるハイライト */
-.mf-sub-highlight {
+/* 手動ラベル / Gemini候補の共通ハイライト */
+.mf-sub-highlight-manual,
+.mf-sub-highlight-gemini {
   background-color: rgba(255, 255, 0, 0.25);
   transition: background-color 120ms ease-in-out;
 }
 
-.mf-sub-highlight td {
+.mf-sub-highlight-manual td,
+.mf-sub-highlight-gemini td {
   background-color: rgba(255, 255, 0, 0.25) !important;
 }
 
@@ -21,10 +23,14 @@
   background-color: rgba(240, 140, 0, 0.2) !important;
 }
 
-.mf-sub-duplicate.mf-sub-highlight,
-.mf-sub-highlight.mf-sub-duplicate,
-.mf-sub-duplicate.mf-sub-highlight td,
-.mf-sub-highlight.mf-sub-duplicate td {
+.mf-sub-duplicate.mf-sub-highlight-manual,
+.mf-sub-highlight-manual.mf-sub-duplicate,
+.mf-sub-duplicate.mf-sub-highlight-gemini,
+.mf-sub-highlight-gemini.mf-sub-duplicate,
+.mf-sub-duplicate.mf-sub-highlight-manual td,
+.mf-sub-highlight-manual.mf-sub-duplicate td,
+.mf-sub-duplicate.mf-sub-highlight-gemini td,
+.mf-sub-highlight-gemini.mf-sub-duplicate td {
   background-color: rgba(240, 140, 0, 0.2) !important;
   border-left: 4px solid #f08c00;
 }

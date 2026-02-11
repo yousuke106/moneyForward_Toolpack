@@ -7,6 +7,8 @@ import {
 } from "./settings-constants.js";
 
 const SETTINGS_KEY = "settings";
+const UPDATED_AT_KEY = "updatedAt";
+const GEMINI_API_KEY_STORAGE_KEY = "geminiApiKey";
 
 // 機能トグルは安全側（有効）をデフォルトにする。
 const DEFAULT_FEATURE_FLAGS = {
@@ -61,6 +63,45 @@ const normalizeSettings = (settings = {}) => {
   };
 };
 
+// 保存時刻は number / ISO 文字列の両方を受け付ける。
+const parseUpdatedAt = (settings) => {
+  const raw = settings?.[UPDATED_AT_KEY];
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+    return raw;
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    const parsed = Date.parse(raw);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 0;
+};
+
+// sync/local の両方に設定がある場合は新しい方を採用する。
+const pickLatestSettings = ({ syncSettings, localSettings }) => {
+  if (syncSettings && !localSettings) {
+    return { settings: syncSettings, area: "sync" };
+  }
+  if (localSettings && !syncSettings) {
+    return { settings: localSettings, area: "local" };
+  }
+  if (!(syncSettings && localSettings)) {
+    return null;
+  }
+
+  const syncUpdatedAt = parseUpdatedAt(syncSettings);
+  const localUpdatedAt = parseUpdatedAt(localSettings);
+  if (syncUpdatedAt !== localUpdatedAt) {
+    return localUpdatedAt > syncUpdatedAt
+      ? { settings: localSettings, area: "local" }
+      : { settings: syncSettings, area: "sync" };
+  }
+
+  // タイムスタンプ同値（旧形式含む）は local を優先し、フォールバック保存を尊重する。
+  return { settings: localSettings, area: "local" };
+};
+
 // ルールの検証を含め、保存前に不正値を弾く。
 const validateSettings = (settings = {}) => {
   const normalized = normalizeSettings(settings);
@@ -110,6 +151,14 @@ const setLocal = async (settings) =>
     globalThis.chrome.storage.local.set({ [SETTINGS_KEY]: settings }, cb)
   );
 
+const setLocalGeminiApiKey = async (geminiApiKey) =>
+  promisify((cb) =>
+    globalThis.chrome.storage.local.set(
+      { [GEMINI_API_KEY_STORAGE_KEY]: geminiApiKey },
+      cb
+    )
+  );
+
 // 保存先の容量・失敗に応じてsync→localへ自動フォールバックする。
 export const saveSettingsWithFallback = async (settings) => {
   if (!hasChromeStorage()) {
@@ -123,7 +172,15 @@ export const saveSettingsWithFallback = async (settings) => {
     throw new Error(message);
   }
 
-  const normalized = validation.settings;
+  const geminiApiKey = validation.settings.geminiApiKey ?? "";
+  await setLocalGeminiApiKey(geminiApiKey);
+
+  const normalized = {
+    ...validation.settings,
+    // APIキーはlocal専用に保存し、syncへは載せない。
+    geminiApiKey: "",
+    [UPDATED_AT_KEY]: Date.now(),
+  };
 
   const bytes = await getBytesInUse().catch(() => SYNC_TOTAL_LIMIT_BYTES);
   if (bytes >= SYNC_THRESHOLD_BYTES) {
@@ -145,26 +202,37 @@ export const loadSettings = async () => {
   if (!hasChromeStorage()) {
     return null;
   }
-  // syncを優先し、無ければlocalから読む。
-  const syncResult = await promisify((cb) =>
-    globalThis.chrome.storage.sync.get(SETTINGS_KEY, cb)
-  ).catch(() => null);
-  if (syncResult?.[SETTINGS_KEY]) {
-    return {
-      settings: normalizeSettings(syncResult[SETTINGS_KEY]),
-      area: "sync",
-    };
+  const [syncResult, localResult, apiKeyResult] = await Promise.all([
+    promisify((cb) =>
+      globalThis.chrome.storage.sync.get(SETTINGS_KEY, cb)
+    ).catch(() => null),
+    promisify((cb) =>
+      globalThis.chrome.storage.local.get(SETTINGS_KEY, cb)
+    ).catch(() => null),
+    promisify((cb) =>
+      globalThis.chrome.storage.local.get(GEMINI_API_KEY_STORAGE_KEY, cb)
+    ).catch(() => null),
+  ]);
+
+  const picked = pickLatestSettings({
+    syncSettings: syncResult?.[SETTINGS_KEY] ?? null,
+    localSettings: localResult?.[SETTINGS_KEY] ?? null,
+  });
+  if (!picked) {
+    return null;
   }
-  const localResult = await promisify((cb) =>
-    globalThis.chrome.storage.local.get(SETTINGS_KEY, cb)
-  ).catch(() => null);
-  if (localResult?.[SETTINGS_KEY]) {
-    return {
-      settings: normalizeSettings(localResult[SETTINGS_KEY]),
-      area: "local",
-    };
-  }
-  return null;
+  const normalized = normalizeSettings(picked.settings);
+  const localApiKey = apiKeyResult?.[GEMINI_API_KEY_STORAGE_KEY];
+  return {
+    settings: {
+      ...normalized,
+      geminiApiKey:
+        typeof localApiKey === "string"
+          ? localApiKey
+          : (normalized.geminiApiKey ?? ""),
+    },
+    area: picked.area,
+  };
 };
 
 /**
