@@ -43,3 +43,7 @@ export const buildCsvFilename = ({ year, month }) =>
 // 追加機能は安全側で有効に倒す（設定が無い/壊れている場合も動くようにする）。
 export const isDownloaderEnabled = (settings) =>
   settings?.featureFlags?.downloaderContextMenuEnabled ?? true;
+
+// 収支内訳の金額コピー機能は安全側（有効）を既定とする。
+export const isSummaryOutgoAmountCopyEnabled = (settings) =>
+  settings?.featureFlags?.summaryOutgoAmountCopyEnabled ?? true;
