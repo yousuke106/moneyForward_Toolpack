@@ -105,7 +105,9 @@
             トグルやカテゴリルールは変更と同時に保存されます。
           </div>
           <div class="save-block">
-            <button id="saveBtn" disabled>APIキーと解析設定を保存</button>
+            <button id="saveBtn" type="button" disabled>
+              APIキーと解析設定を保存
+            </button>
             <div id="status" class="status" aria-live="polite"></div>
           </div>
         </div>
@@ -164,6 +166,29 @@
                 id="downloaderToggle"
                 type="checkbox"
                 aria-label="家計簿CSVダウンロードメニューの有効/無効"
+              >
+              <span class="slider" aria-hidden="true"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="row-inline between">
+            <div>
+              <div class="field-title">
+                右クリックで収支内訳の金額コピーを有効にする
+              </div>
+              <div class="note">
+                ON:
+                収支内訳ページ（/cf/summary）で右クリックメニューから支出中分類の金額をコピー。OFF:
+                メニューを非表示/無効化。
+              </div>
+            </div>
+            <label class="switch">
+              <input
+                id="summaryOutgoCopyToggle"
+                type="checkbox"
+                aria-label="収支内訳の金額コピーメニューの有効/無効"
               >
               <span class="slider" aria-hidden="true"></span>
             </label>

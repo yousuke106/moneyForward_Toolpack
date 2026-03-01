@@ -15,6 +15,7 @@ const DEFAULT_FEATURE_FLAGS = {
   geminiAnalysisEnabled: true,
   duplicateCheckEnabled: true,
   downloaderContextMenuEnabled: true,
+  summaryOutgoAmountCopyEnabled: true,
   categoryRuleAlertEnabled: true,
   satisfactionEnabled: true,
   subscriptionLabelEnabled: true,

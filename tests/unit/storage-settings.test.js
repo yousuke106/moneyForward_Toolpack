@@ -46,6 +46,7 @@ export const runStorageSettingsTests = async () => {
   assert.ok(normalized.categoryRules?.blacklist);
   assert.strictEqual(normalized.featureFlags.categoryRuleAlertEnabled, true);
   assert.strictEqual(normalized.featureFlags.geminiAnalysisEnabled, false);
+  assert.strictEqual(normalized.featureFlags.summaryOutgoAmountCopyEnabled, true);
 
   // saveSettingsWithFallback rejects too many rules
   const store = stubChromeStorage();

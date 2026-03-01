@@ -7,6 +7,7 @@ import { runUiPrefsTests } from "./unit/ui-prefs.test.js";
 import { runHeaderUtilsTests } from "./unit/header-utils.test.js";
 import { runLargeCategoryOrderTests } from "./unit/large-category-order.test.js";
 import { runGeminiUtilsTests } from "./unit/gemini-utils.test.js";
+import { runSummaryOutgoCopyTests } from "./unit/summary-outgo-copy.test.js";
 
 const main = async () => {
   await runDataTests();
@@ -16,6 +17,7 @@ const main = async () => {
   runHeaderUtilsTests();
   runLargeCategoryOrderTests();
   runGeminiUtilsTests();
+  runSummaryOutgoCopyTests();
   await runStorageSettingsTests();
   await runUiPrefsTests();
   // eslint-disable-next-line no-console

@@ -29,6 +29,9 @@ const thresholdErrorEl = document.getElementById("thresholdError");
 const geminiToggle = document.getElementById("geminiToggle");
 const duplicateToggle = document.getElementById("duplicateToggle");
 const downloaderToggle = document.getElementById("downloaderToggle");
+const summaryOutgoCopyToggle = document.getElementById(
+  "summaryOutgoCopyToggle"
+);
 const categoryToggle = document.getElementById("categoryRuleToggle");
 const satisfactionToggle = document.getElementById("satisfactionToggle");
 const subscriptionLabelToggle = document.getElementById(
@@ -164,6 +167,7 @@ const validate = () => {
   const geminiEnabled = geminiToggle?.checked ?? true;
   const duplicateEnabled = duplicateToggle?.checked ?? true;
   const downloaderEnabled = downloaderToggle?.checked ?? true;
+  const summaryOutgoCopyEnabled = summaryOutgoCopyToggle?.checked ?? true;
   const categoryEnabled = categoryToggle?.checked ?? true;
   const satisfactionEnabled = satisfactionToggle?.checked ?? true;
   const subscriptionLabelEnabled = subscriptionLabelToggle?.checked ?? true;
@@ -175,6 +179,7 @@ const validate = () => {
     geminiEnabled,
     duplicateEnabled,
     downloaderEnabled,
+    summaryOutgoCopyEnabled,
     categoryEnabled,
     satisfactionEnabled,
     subscriptionLabelEnabled,
@@ -203,6 +208,8 @@ const applyFeatureToggles = (settings) => {
   const duplicateEnabled = settings.featureFlags?.duplicateCheckEnabled ?? true;
   const downloaderEnabled =
     settings.featureFlags?.downloaderContextMenuEnabled ?? true;
+  const summaryOutgoCopyEnabled =
+    settings.featureFlags?.summaryOutgoAmountCopyEnabled ?? true;
   const categoryEnabled =
     settings.featureFlags?.categoryRuleAlertEnabled ?? true;
   const satisfactionEnabled =
@@ -218,6 +225,9 @@ const applyFeatureToggles = (settings) => {
   }
   if (downloaderToggle) {
     downloaderToggle.checked = downloaderEnabled;
+  }
+  if (summaryOutgoCopyToggle) {
+    summaryOutgoCopyToggle.checked = summaryOutgoCopyEnabled;
   }
   if (categoryToggle) {
     categoryToggle.checked = categoryEnabled;
@@ -257,6 +267,7 @@ const buildSettingsSnapshot = ({
   geminiEnabled,
   duplicateEnabled,
   downloaderEnabled,
+  summaryOutgoCopyEnabled,
   categoryEnabled,
   satisfactionEnabled,
   subscriptionLabelEnabled,
@@ -297,6 +308,7 @@ const buildSettingsSnapshot = ({
       geminiAnalysisEnabled: geminiEnabled,
       duplicateCheckEnabled: duplicateEnabled,
       downloaderContextMenuEnabled: downloaderEnabled,
+      summaryOutgoAmountCopyEnabled: summaryOutgoCopyEnabled,
       categoryRuleAlertEnabled: categoryEnabled,
       satisfactionEnabled,
       subscriptionLabelEnabled,
@@ -538,6 +550,7 @@ const persistCategoryRules = async () => {
       geminiAnalysisEnabled: geminiToggle?.checked ?? true,
       duplicateCheckEnabled: duplicateToggle?.checked ?? true,
       downloaderContextMenuEnabled: downloaderToggle?.checked ?? true,
+      summaryOutgoAmountCopyEnabled: summaryOutgoCopyToggle?.checked ?? true,
       categoryRuleAlertEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
@@ -685,6 +698,24 @@ const applySettingsToUi = (settings, area) => {
   renderStatus(`ロード元: ${area === "sync" ? "sync" : "local"}`);
 };
 
+const enableDefaultFeatureToggles = () => {
+  const toggles = [
+    geminiToggle,
+    duplicateToggle,
+    downloaderToggle,
+    summaryOutgoCopyToggle,
+    categoryToggle,
+    satisfactionToggle,
+    subscriptionLabelToggle,
+    largeCategoryOrderToggle,
+  ];
+  for (const toggle of toggles) {
+    if (toggle) {
+      toggle.checked = true;
+    }
+  }
+};
+
 // 初期ロードはUI設定→保存設定の順で読み込み、画面状態を整える。
 const load = async () => {
   // UI設定→拡張設定の順で読み込むと表示が安定する。
@@ -694,27 +725,7 @@ const load = async () => {
   const result = await loadSettings();
   if (!result) {
     modelSelect.value = "gemini-2.5-flash";
-    if (geminiToggle) {
-      geminiToggle.checked = true;
-    }
-    if (duplicateToggle) {
-      duplicateToggle.checked = true;
-    }
-    if (downloaderToggle) {
-      downloaderToggle.checked = true;
-    }
-    if (categoryToggle) {
-      categoryToggle.checked = true;
-    }
-    if (satisfactionToggle) {
-      satisfactionToggle.checked = true;
-    }
-    if (subscriptionLabelToggle) {
-      subscriptionLabelToggle.checked = true;
-    }
-    if (largeCategoryOrderToggle) {
-      largeCategoryOrderToggle.checked = true;
-    }
+    enableDefaultFeatureToggles();
     if (largeCategoryOrderResetBtn) {
       largeCategoryOrderResetBtn.disabled = true;
     }
@@ -737,6 +748,7 @@ const onSave = async () => {
     geminiEnabled,
     duplicateEnabled,
     downloaderEnabled,
+    summaryOutgoCopyEnabled,
     categoryEnabled,
     satisfactionEnabled,
     subscriptionLabelEnabled,
@@ -749,6 +761,7 @@ const onSave = async () => {
     geminiEnabled,
     duplicateEnabled,
     downloaderEnabled,
+    summaryOutgoCopyEnabled,
     categoryEnabled,
     satisfactionEnabled,
     subscriptionLabelEnabled,
@@ -816,6 +829,7 @@ if (geminiToggle) {
       geminiEnabled: geminiToggle.checked,
       duplicateEnabled: duplicateToggle?.checked ?? true,
       downloaderEnabled: downloaderToggle?.checked ?? true,
+      summaryOutgoCopyEnabled: summaryOutgoCopyToggle?.checked ?? true,
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
@@ -842,6 +856,7 @@ if (duplicateToggle) {
       geminiEnabled: geminiToggle?.checked ?? true,
       duplicateEnabled: duplicateToggle.checked,
       downloaderEnabled: downloaderToggle?.checked ?? true,
+      summaryOutgoCopyEnabled: summaryOutgoCopyToggle?.checked ?? true,
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
@@ -859,6 +874,25 @@ if (downloaderToggle) {
       geminiEnabled: geminiToggle?.checked ?? true,
       duplicateEnabled: duplicateToggle?.checked ?? true,
       downloaderEnabled: downloaderToggle.checked,
+      summaryOutgoCopyEnabled: summaryOutgoCopyToggle?.checked ?? true,
+      categoryEnabled: categoryToggle?.checked ?? true,
+      satisfactionEnabled: satisfactionToggle?.checked ?? true,
+      subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
+      largeCategoryOrderEnabled: largeCategoryOrderToggle?.checked ?? true,
+    }).catch((error) =>
+      renderStatus(`保存に失敗しました: ${error.message}`, true)
+    );
+  });
+}
+
+if (summaryOutgoCopyToggle) {
+  summaryOutgoCopyToggle.addEventListener("change", () => {
+    validate();
+    saveFeatureToggle({
+      geminiEnabled: geminiToggle?.checked ?? true,
+      duplicateEnabled: duplicateToggle?.checked ?? true,
+      downloaderEnabled: downloaderToggle?.checked ?? true,
+      summaryOutgoCopyEnabled: summaryOutgoCopyToggle.checked,
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
@@ -876,6 +910,7 @@ if (categoryToggle) {
       geminiEnabled: geminiToggle?.checked ?? true,
       duplicateEnabled: duplicateToggle?.checked ?? true,
       downloaderEnabled: downloaderToggle?.checked ?? true,
+      summaryOutgoCopyEnabled: summaryOutgoCopyToggle?.checked ?? true,
       categoryEnabled: categoryToggle.checked,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
@@ -893,6 +928,7 @@ if (satisfactionToggle) {
       geminiEnabled: geminiToggle?.checked ?? true,
       duplicateEnabled: duplicateToggle?.checked ?? true,
       downloaderEnabled: downloaderToggle?.checked ?? true,
+      summaryOutgoCopyEnabled: summaryOutgoCopyToggle?.checked ?? true,
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle.checked,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
@@ -910,6 +946,7 @@ if (subscriptionLabelToggle) {
       geminiEnabled: geminiToggle?.checked ?? true,
       duplicateEnabled: duplicateToggle?.checked ?? true,
       downloaderEnabled: downloaderToggle?.checked ?? true,
+      summaryOutgoCopyEnabled: summaryOutgoCopyToggle?.checked ?? true,
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle.checked,
@@ -926,6 +963,7 @@ if (largeCategoryOrderToggle) {
       geminiEnabled: geminiToggle?.checked ?? true,
       duplicateEnabled: duplicateToggle?.checked ?? true,
       downloaderEnabled: downloaderToggle?.checked ?? true,
+      summaryOutgoCopyEnabled: summaryOutgoCopyToggle?.checked ?? true,
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
@@ -943,6 +981,7 @@ const runLargeCategoryOrderReset = async () => {
       geminiEnabled: geminiToggle?.checked ?? true,
       duplicateEnabled: duplicateToggle?.checked ?? true,
       downloaderEnabled: downloaderToggle?.checked ?? true,
+      summaryOutgoCopyEnabled: summaryOutgoCopyToggle?.checked ?? true,
       categoryEnabled: categoryToggle?.checked ?? true,
       satisfactionEnabled: satisfactionToggle?.checked ?? true,
       subscriptionLabelEnabled: subscriptionLabelToggle?.checked ?? true,
@@ -994,6 +1033,7 @@ const saveFeatureToggle = async ({
   geminiEnabled,
   duplicateEnabled,
   downloaderEnabled,
+  summaryOutgoCopyEnabled,
   categoryEnabled,
   satisfactionEnabled,
   subscriptionLabelEnabled,
@@ -1004,6 +1044,7 @@ const saveFeatureToggle = async ({
     geminiEnabled,
     duplicateEnabled,
     downloaderEnabled,
+    summaryOutgoCopyEnabled,
     categoryEnabled,
     satisfactionEnabled,
     subscriptionLabelEnabled,

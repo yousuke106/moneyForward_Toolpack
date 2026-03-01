@@ -3,6 +3,7 @@ import {
   buildCsvFilename,
   buildCsvRequestUrl,
   isDownloaderEnabled,
+  isSummaryOutgoAmountCopyEnabled,
   parseMonthFromHeader,
 } from "../../src/background/downloader-utils.js";
 
@@ -35,6 +36,13 @@ export const runDownloaderTests = () => {
   assert.strictEqual(isDownloaderEnabled(undefined), true);
   assert.strictEqual(
     isDownloaderEnabled({ featureFlags: { downloaderContextMenuEnabled: false } }),
+    false
+  );
+  assert.strictEqual(isSummaryOutgoAmountCopyEnabled(undefined), true);
+  assert.strictEqual(
+    isSummaryOutgoAmountCopyEnabled({
+      featureFlags: { summaryOutgoAmountCopyEnabled: false },
+    }),
     false
   );
 };
