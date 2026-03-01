@@ -19,6 +19,10 @@ import {
 const TIMEOUT_MS = 60_000;
 const DOWNLOAD_MENU_ID = "mf-download-visible-month";
 const SUMMARY_OUTGO_COPY_MENU_ID = "mf-copy-summary-outgo-amounts";
+const DOWNLOAD_MENU_URL_PATTERNS = [
+  "https://moneyforward.com/cf",
+  "https://moneyforward.com/cf/",
+];
 const SUMMARY_OUTGO_COPY_URL_PATTERNS = [
   "https://moneyforward.com/cf/summary*",
 ];
@@ -353,7 +357,7 @@ const refreshContextMenus = ({ downloaderEnabled, summaryCopyEnabled }) => {
         await createContextMenu({
           id: DOWNLOAD_MENU_ID,
           title: "表示中の年月の家計簿CSVをダウンロード",
-          documentUrlPatterns: ["https://moneyforward.com/*"],
+          documentUrlPatterns: DOWNLOAD_MENU_URL_PATTERNS,
         });
       }
       if (summaryCopyEnabled) {
