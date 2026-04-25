@@ -58,7 +58,13 @@ rerunBtn?.addEventListener("click", () => {
   chrome.tabs?.query({ active: true, currentWindow: true }, (tabs) => {
     const tabId = tabs?.[0]?.id;
     if (tabId !== undefined) {
-      chrome.tabs.sendMessage(tabId, { type: "mf_subs_rerun_gemini" });
+      chrome.tabs.sendMessage(tabId, { type: "mf_subs_rerun_gemini" }, () => {
+        const error = chrome.runtime?.lastError;
+        if (error) {
+          // 対象外ページでは送信に失敗するため、lastErrorを読み取って警告を抑える。
+          return;
+        }
+      });
       window.close();
     }
   });

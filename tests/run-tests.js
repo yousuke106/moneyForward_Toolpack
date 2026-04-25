@@ -7,6 +7,9 @@ import { runUiPrefsTests } from "./unit/ui-prefs.test.js";
 import { runHeaderUtilsTests } from "./unit/header-utils.test.js";
 import { runLargeCategoryOrderTests } from "./unit/large-category-order.test.js";
 import { runGeminiUtilsTests } from "./unit/gemini-utils.test.js";
+import { runGeminiAnalysisTests } from "./unit/gemini-analysis.test.js";
+import { runBackgroundGeminiRequestTests } from "./unit/background-gemini-request.test.js";
+import { runNativeSortableRegistryTests } from "./unit/native-sortable-registry.test.js";
 import { runSummaryOutgoCopyTests } from "./unit/summary-outgo-copy.test.js";
 
 const main = async () => {
@@ -17,6 +20,9 @@ const main = async () => {
   runHeaderUtilsTests();
   runLargeCategoryOrderTests();
   runGeminiUtilsTests();
+  runGeminiAnalysisTests();
+  runBackgroundGeminiRequestTests();
+  runNativeSortableRegistryTests();
   runSummaryOutgoCopyTests();
   await runStorageSettingsTests();
   await runUiPrefsTests();

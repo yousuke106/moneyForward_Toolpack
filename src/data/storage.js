@@ -30,6 +30,7 @@ const DEFAULT_CATEGORY_RULES = {
 // 初期設定はUIの初期表示とも同期させる。
 const DEFAULT_SETTINGS = {
   geminiApiKey: "",
+  geminiApiKeyConfigured: false,
   scoreThreshold: DEFAULT_THRESHOLD,
   model: DEFAULT_MODEL,
   featureFlags: DEFAULT_FEATURE_FLAGS,
@@ -178,6 +179,7 @@ export const saveSettingsWithFallback = async (settings) => {
 
   const normalized = {
     ...validation.settings,
+    geminiApiKeyConfigured: geminiApiKey.length > 0,
     // APIキーはlocal専用に保存し、syncへは載せない。
     geminiApiKey: "",
     [UPDATED_AT_KEY]: Date.now(),

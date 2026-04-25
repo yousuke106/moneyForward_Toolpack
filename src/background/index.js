@@ -1,5 +1,5 @@
 /* globals chrome */
-import { loadSettings } from "../data/storage.js";
+import { loadSettings, withApiKey } from "../data/storage.js";
 import {
   BADGE_COLORS,
   buildCsvFilename,
@@ -9,6 +9,7 @@ import {
   isSummaryOutgoAmountCopyEnabled,
   parseMonthFromHeader,
 } from "./downloader-utils.js";
+import { getValidatedGeminiRequest } from "./gemini-request.js";
 import { extractJson } from "./gemini-utils.js";
 import {
   buildClipboardTextFromAmounts,
@@ -30,6 +31,14 @@ const BADGE_CLEAR_DELAY = 2800;
 let badgeResetHandle = 0;
 let downloadContextMenuEnabled = true;
 let summaryOutgoCopyContextMenuEnabled = true;
+
+const logGeminiError = (error) => {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[mf-sub] gemini request failed",
+    error?.message ?? String(error)
+  );
+};
 
 // Geminiに渡す最小限のプロンプトを組み立てる（ラベル値は返させない）。
 const buildPrompt = (month, transactions) => {
@@ -393,33 +402,38 @@ const syncContextMenuToggles = async () => {
   }
 };
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "requestGeminiAnalysis") {
     // コンテント側の要求を受け、Gemini APIを背景で実行する。
     (async () => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort("timeout"), TIMEOUT_MS);
       try {
-        const { apiKey, model, month, transactions } = message;
-        if (!apiKey) {
-          throw new Error("APIキーが設定されていません");
-        }
+        const { model, month, transactions } = getValidatedGeminiRequest(
+          message,
+          sender
+        );
         const body = buildPrompt(month, transactions);
 
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": apiKey,
-            },
-            body: JSON.stringify(body),
-            signal: controller.signal,
-            // keepalive is ignored in SW fetch but included for safety
-            keepalive: true,
+        const res = await withApiKey((apiKey) => {
+          if (!apiKey) {
+            throw new Error("APIキーが設定されていません");
           }
-        );
+          return fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": apiKey,
+              },
+              body: JSON.stringify(body),
+              signal: controller.signal,
+              // keepalive is ignored in SW fetch but included for safety
+              keepalive: true,
+            }
+          );
+        });
         if (!res.ok) {
           throw new Error(`Gemini API error: ${res.status}`);
         }
@@ -427,6 +441,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const parsed = extractJson(data);
         sendResponse({ ok: true, data: parsed });
       } catch (error) {
+        logGeminiError(error);
         sendResponse({ ok: false, error: error?.message ?? String(error) });
       } finally {
         clearTimeout(timer);

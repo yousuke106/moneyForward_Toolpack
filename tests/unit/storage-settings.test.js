@@ -47,6 +47,7 @@ export const runStorageSettingsTests = async () => {
   assert.strictEqual(normalized.featureFlags.categoryRuleAlertEnabled, true);
   assert.strictEqual(normalized.featureFlags.geminiAnalysisEnabled, false);
   assert.strictEqual(normalized.featureFlags.summaryOutgoAmountCopyEnabled, true);
+  assert.strictEqual(normalized.geminiApiKeyConfigured, false);
 
   // saveSettingsWithFallback rejects too many rules
   const store = stubChromeStorage();
@@ -69,6 +70,7 @@ export const runStorageSettingsTests = async () => {
   const result = await saveSettingsWithFallback(okSettings);
   assert.ok(result.area === "sync" || result.area === "local");
   assert.strictEqual(store.sync.settings?.geminiApiKey, "");
+  assert.strictEqual(store.sync.settings?.geminiApiKeyConfigured, false);
   assert.strictEqual(store.local.geminiApiKey, "");
 
   const loaded = await loadSettings();
@@ -87,6 +89,7 @@ export const runStorageSettingsTests = async () => {
   await saveSettingsWithFallback(keySettings);
   assert.strictEqual(store.local.geminiApiKey, "secret-key");
   assert.strictEqual(store.sync.settings?.geminiApiKey, "");
+  assert.strictEqual(store.sync.settings?.geminiApiKeyConfigured, true);
   const loadedWithKey = await loadSettings();
   assert.strictEqual(loadedWithKey?.settings?.geminiApiKey, "secret-key");
 

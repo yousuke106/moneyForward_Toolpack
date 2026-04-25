@@ -1,12 +1,13 @@
 {
   "name": "moneyforward-toolpack",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "private": true,
   "type": "module",
   "scripts": {
     "lint": "ultracite lint",
     "format": "ultracite format",
     "build": "node scripts/build.js",
+    "test": "node tests/run-tests.js",
     "check": "ultracite check",
     "fix": "ultracite fix"
   },

@@ -1,6 +1,5 @@
 /* テーマカラーとUI変数はrootで一括管理 */
 :root {
-  color-scheme: light;
   --bg:
     radial-gradient(140% 180% at 10% 12%, #f7f9ff 0%, #eef2ff 40%, #e5edff 80%),
     radial-gradient(
@@ -24,6 +23,7 @@
   --radius: 16px;
   --input-border: #c5cfee;
   --input-bg: rgba(255, 255, 255, 0.94);
+  color-scheme: light;
 }
 
 /* 最低限のリセット */
@@ -33,18 +33,20 @@
 
 /* 画面全体のベーススタイル */
 body {
-  margin: 0;
   min-height: 100vh;
+  margin: 0;
   font-family:
     "Space Grotesk", "Noto Sans JP", "Hiragino Sans", "BIZ UDGothic", sans-serif;
-  background: var(--bg);
   color: var(--text);
+  background: var(--bg);
 }
 
 /* 背景の装飾レイヤー（本文とは分離） */
 .bg-layer {
   position: fixed;
   inset: 0;
+  z-index: 0;
+  pointer-events: none;
   background:
     radial-gradient(
       circle at 80% 10%,
@@ -57,8 +59,6 @@ body {
       transparent 32%
     );
   filter: blur(20px);
-  pointer-events: none;
-  z-index: 0;
 }
 
 /* コンテンツのレイアウト幅と余白 */
@@ -66,26 +66,26 @@ body {
   position: relative;
   z-index: 1;
   max-width: 880px;
-  margin: 48px auto;
   padding: 0 22px 48px;
+  margin: 48px auto;
 }
 
 /* ヘッダー領域 */
 .hero {
   display: flex;
-  align-items: center;
   gap: 14px;
+  align-items: center;
   margin-bottom: 16px;
 }
 
 .pill {
-  background: var(--accent);
-  color: #fff;
   padding: 8px 14px;
-  border-radius: 999px;
   font-size: 12px;
-  letter-spacing: 0.04em;
   font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.04em;
+  background: var(--accent);
+  border-radius: 999px;
   box-shadow: 0 12px 30px rgba(46, 84, 255, 0.28);
 }
 
@@ -97,34 +97,34 @@ body {
 
 .subtitle {
   margin: 0;
-  color: var(--muted);
   font-size: 14px;
+  color: var(--muted);
 }
 
 /* セクションカード */
 .card {
+  position: relative;
+  padding: 20px;
+  margin-top: 18px;
+  overflow: hidden;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
   box-shadow: var(--shadow);
   backdrop-filter: blur(12px);
-  margin-top: 18px;
-  position: relative;
-  overflow: hidden;
 }
 
 .card::before {
-  content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
+  pointer-events: none;
+  content: "";
   background: linear-gradient(
     120deg,
     rgba(108, 139, 255, 0.1),
     transparent 35%
   );
-  pointer-events: none;
+  border-radius: inherit;
 }
 
 .card h2 {
@@ -135,8 +135,8 @@ body {
 
 .helper {
   margin: 0 0 12px;
-  color: var(--muted);
   font-size: 13px;
+  color: var(--muted);
 }
 
 .field {
@@ -161,9 +161,9 @@ select {
   width: 100%;
   padding: 12px;
   font-size: 14px;
+  background: var(--input-bg);
   border: 1px solid var(--input-border);
   border-radius: 10px;
-  background: var(--input-bg);
   transition:
     border 120ms ease,
     box-shadow 120ms ease;
@@ -177,9 +177,9 @@ select:focus {
 }
 
 .note {
-  color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+  color: var(--muted);
 }
 
 .field-title {
@@ -187,27 +187,27 @@ select:focus {
 }
 
 .error {
-  color: #b00020;
-  font-size: 12px;
   margin-top: 4px;
+  font-size: 12px;
+  color: #b00020;
 }
 
 /* 主要ボタンはアクセントで統一 */
 button {
   padding: 14px 16px;
   font-size: 15px;
-  background: var(--accent);
+  font-weight: 800;
   color: #fff;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  background: var(--accent);
   border: none;
   border-radius: 12px;
-  cursor: pointer;
-  font-weight: 800;
-  letter-spacing: 0.01em;
+  box-shadow: 0 16px 40px rgba(46, 84, 255, 0.28);
   transition:
     transform 120ms ease,
     box-shadow 150ms ease,
     background 160ms ease;
-  box-shadow: 0 16px 40px rgba(46, 84, 255, 0.28);
 }
 
 button:hover:not(:disabled) {
@@ -220,8 +220,8 @@ button:focus-visible {
 }
 
 button:disabled {
-  background: #a9b4d7;
   cursor: not-allowed;
+  background: #a9b4d7;
   box-shadow: none;
 }
 
@@ -229,40 +229,40 @@ button:disabled {
 .switch {
   position: relative;
   display: inline-block;
+  flex-shrink: 0;
   width: 52px;
   height: 30px;
-  flex-shrink: 0;
 }
 
 .switch input {
-  opacity: 0;
   width: 0;
   height: 0;
+  opacity: 0;
 }
 
 .slider {
   position: absolute;
-  cursor: pointer;
   top: 0;
-  left: 0;
   right: 0;
   bottom: 0;
+  left: 0;
+  cursor: pointer;
   background-color: #d4dcf4;
-  transition: 0.2s ease;
   border-radius: 30px;
+  transition: 0.2s ease;
 }
 
 .slider:before {
   position: absolute;
-  content: "";
-  height: 22px;
-  width: 22px;
-  left: 4px;
   bottom: 4px;
+  left: 4px;
+  width: 22px;
+  height: 22px;
+  content: "";
   background-color: #fff;
-  transition: 0.2s ease;
   border-radius: 50%;
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.12);
+  transition: 0.2s ease;
 }
 
 .switch input:checked + .slider {
@@ -274,9 +274,9 @@ button:disabled {
 }
 
 .status {
-  color: var(--accent-strong);
-  font-size: 13px;
   min-height: 18px;
+  font-size: 13px;
+  color: var(--accent-strong);
 }
 
 /* カテゴリルールのタブ切り替え */
@@ -288,42 +288,42 @@ button:disabled {
 
 .tab {
   flex: 1;
-  border: 1px solid var(--input-border);
-  background: #fff;
-  color: var(--text);
-  border-radius: 10px;
   padding: 10px 12px;
-  box-shadow: none;
   font-weight: 700;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  box-shadow: none;
 }
 
 .tab.is-active {
+  color: #1b2f7c;
   background: #e7ecff;
   border-color: #2f4fff;
-  color: #1b2f7c;
 }
 
 /* カテゴリルールの一覧 */
 .category-list {
-  list-style: none;
+  max-height: 240px;
   padding: 0;
   margin: 0 0 12px;
-  max-height: 240px;
   overflow-y: auto;
+  list-style: none;
+  background: #fff;
   border: 1px solid var(--input-border);
   border-radius: 12px;
-  background: #fff;
 }
 
 .category-list__item,
 .category-list__empty {
   display: flex;
+  gap: 12px;
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-bottom: 1px solid #eef1fb;
-  gap: 12px;
   font-size: 14px;
+  border-bottom: 1px solid #eef1fb;
 }
 
 .category-list__item:last-child,
@@ -332,8 +332,8 @@ button:disabled {
 }
 
 .category-list__empty {
-  color: var(--muted);
   justify-content: center;
+  color: var(--muted);
 }
 
 .category-form {
@@ -344,12 +344,12 @@ button:disabled {
 }
 
 .ghost {
-  background: transparent;
-  color: #1f3c9e;
-  border: 1px solid #d7ddf4;
-  box-shadow: none;
   padding: 10px 12px;
+  color: #1f3c9e;
+  background: transparent;
+  border: 1px solid #d7ddf4;
   border-radius: 10px;
+  box-shadow: none;
 }
 
 .ghost.danger {
@@ -369,12 +369,12 @@ button:disabled {
 
 /* リセット確認の警告ブロック */
 .confirm {
-  border: 1px solid rgba(231, 76, 60, 0.35);
-  background: rgba(231, 76, 60, 0.08);
-  border-radius: 12px;
-  padding: 12px 14px;
   display: grid;
   gap: 10px;
+  padding: 12px 14px;
+  background: rgba(231, 76, 60, 0.08);
+  border: 1px solid rgba(231, 76, 60, 0.35);
+  border-radius: 12px;
 }
 
 .confirm-content {
@@ -402,14 +402,14 @@ button:disabled {
 /* APIキーの表示切り替え */
 .toggle-visibility {
   display: inline-flex;
-  align-items: center;
   gap: 6px;
+  align-items: center;
   padding: 10px 12px;
-  border: 1px solid var(--input-border);
-  border-radius: 10px;
-  background: #f5f7ff;
   font-size: 12px;
   cursor: pointer;
+  background: #f5f7ff;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
 }
 
 .toggle-visibility input {
@@ -420,24 +420,24 @@ button:disabled {
 /* 複数カードを自動で並べるレイアウト */
 .grid {
   display: grid;
-  gap: 16px;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
 }
 
 .save-inline {
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  margin-top: 12px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--border);
   flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-start;
+  padding-top: 14px;
+  margin-top: 12px;
+  border-top: 1px dashed var(--border);
 }
 
 .save-block {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-width: 220px;
   align-items: flex-start;
+  min-width: 220px;
 }

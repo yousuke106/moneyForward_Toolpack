@@ -46,23 +46,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     memoHeadFallback: 'th[data-title="メモ"]',
     categoryLarge: ".v_l_ctg",
     categoryMiddle: ".v_m_ctg",
-    memoText: "td.memo .noform span",
-    noteText: "td.note",
   };
   // セッション内のフラグ操作を小さく包んで可読性を上げる。
   const getSessionFlag = (key) => sessionStorage.getItem(key);
-  const setSessionFlag = (key, value) => sessionStorage.setItem(key, value);
-  const removeSessionFlag = (key) => sessionStorage.removeItem(key);
-  const getSessionFlagKeys = () => {
-    const keys = [];
-    for (let i = 0; i < sessionStorage.length; i += 1) {
-      const key = sessionStorage.key(i);
-      if (key) {
-        keys.push(key);
-      }
-    }
-    return keys;
-  };
 
   // devビルド/セッションフラグで詳細ログを出せるようにする。
   const isDev =
@@ -75,7 +61,6 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const DUPLICATE_CLASS = "mf-sub-duplicate";
   const CATEGORY_ALERT_ROW_CLASS = "mf-sub-category-alert-row";
   const CATEGORY_ALERT_CELL_CLASS = "mf-sub-category-alert-cell";
-  const SESSION_FLAG_PREFIX = "mf_subs_checked_";
   const UI_PREFS_KEY = "mf_toolpack_ui_prefs";
   const DEFAULT_UI_PREFS = {
     maskingFeatureEnabled: true,
@@ -110,6 +95,8 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const SAVE_ERROR_THROTTLE_MS = 3000;
   const DEFAULT_THRESHOLD = 70;
   const DEFAULT_MODEL = "gemini-2.5-flash";
+  const GEMINI_ERROR_MESSAGE_MAX_LENGTH = 64;
+  const GEMINI_TRANSACTION_STRING_MAX_LENGTH = 200;
   const SYNC_THRESHOLD_BYTES = 90 * 1024;
   const SYNC_TOTAL_LIMIT_BYTES = 100 * 1024;
   const SETTINGS_UPDATED_AT_KEY = "updatedAt";
@@ -123,11 +110,25 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   let cachedUiPrefsPromise = null;
   let saveErrorToastTimer = 0;
   let lastSaveErrorAt = 0;
+  let geminiAnalysisState = {
+    month: "",
+    resultsByTxId: {},
+  };
+  let geminiRunState = {
+    inFlight: false,
+    rerunQueued: false,
+  };
+  let lastGeminiSettingsFingerprint = "";
+  const nativeSortableRegistry = new WeakMap();
   const log = (...args) => {
     if (getSessionFlag("mf_subs_debug") === "true" || isDev) {
       // eslint-disable-next-line no-console
       console.log("[mf-sub]", ...args);
     }
+  };
+  const logError = (...args) => {
+    // eslint-disable-next-line no-console
+    console.warn("[mf-sub]", ...args);
   };
 
   // 保存失敗時は控えめな通知を表示し、ユーザーに気づけるようにする。
@@ -1301,7 +1302,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       return localSettings;
     }
     if (!(syncSettings && localSettings)) {
-      return {};
+      return null;
     }
 
     const syncUpdatedAt = parseSettingsUpdatedAt(syncSettings);
@@ -1323,23 +1324,15 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       return cachedSettingsPromise;
     }
     cachedSettingsPromise = (async () => {
-      const [syncRes, localRes, apiKeyRes] = await Promise.all([
+      const [syncRes, localRes] = await Promise.all([
         safeStorageGet("sync", "settings", {}),
         safeStorageGet("local", "settings", {}),
-        safeStorageGet("local", GEMINI_API_KEY_STORAGE_KEY, {}),
       ]);
       const merged = pickLatestCachedSettings({
         syncSettings: syncRes?.settings ?? null,
         localSettings: localRes?.settings ?? null,
       });
-      const localApiKey = apiKeyRes?.[GEMINI_API_KEY_STORAGE_KEY];
-      return {
-        ...merged,
-        geminiApiKey:
-          typeof localApiKey === "string"
-            ? localApiKey
-            : (merged?.geminiApiKey ?? ""),
-      };
+      return merged ?? { featureFlags: {}, geminiApiKeyConfigured: false };
     })();
     try {
       cachedSettings = await cachedSettingsPromise;
@@ -1352,13 +1345,25 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   // options画面と同じ保存先判定（sync容量チェック）で設定を保存する。
   // options画面と同じ容量判定ロジックで保存先を決める。
   const saveSettingsWithFallback = async (nextSettings) => {
-    const geminiApiKey = nextSettings?.geminiApiKey ?? "";
+    const localApiKeyResult = await safeStorageGet(
+      "local",
+      GEMINI_API_KEY_STORAGE_KEY,
+      {}
+    );
+    const geminiApiKey =
+      typeof nextSettings?.geminiApiKey === "string"
+        ? nextSettings.geminiApiKey
+        : (localApiKeyResult?.[GEMINI_API_KEY_STORAGE_KEY] ?? "");
     await setStorageWithError("local", {
       [GEMINI_API_KEY_STORAGE_KEY]: geminiApiKey,
     });
 
     const withUpdatedAt = {
       ...nextSettings,
+      geminiApiKeyConfigured:
+        typeof nextSettings?.geminiApiKeyConfigured === "boolean"
+          ? nextSettings.geminiApiKeyConfigured
+          : geminiApiKey.length > 0,
       // APIキーはlocal専用に保存し、syncへは載せない。
       geminiApiKey: "",
       [SETTINGS_UPDATED_AT_KEY]: Date.now(),
@@ -1565,25 +1570,35 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   // jQueryが無い環境向けの最低限のドラッグ&ドロップ。
   const enableNativeSortable = (nav) => {
     // PointerEventsで最低限のD&D体験を提供する。
-    if (nav.dataset[LARGE_CATEGORY_SORTABLE_FLAG] === "native") {
+    if (
+      nav.dataset[LARGE_CATEGORY_SORTABLE_FLAG] === "native" &&
+      nativeSortableRegistry.has(nav)
+    ) {
       return;
     }
     nav.dataset[LARGE_CATEGORY_SORTABLE_FLAG] = "native";
     let draggingItem = null;
     let pointerId = null;
 
-    const stopDragging = async () => {
+    const cleanupDragging = () => {
       if (!draggingItem) {
         return;
       }
       draggingItem.classList.remove(LARGE_CATEGORY_DRAGGING_CLASS);
       nav.classList.remove(LARGE_CATEGORY_SORTING_ACTIVE_CLASS);
+      draggingItem = null;
+      pointerId = null;
+    };
+
+    const stopDragging = async () => {
+      if (!draggingItem) {
+        return;
+      }
       const { order } = await persistLargeCategoryOrderFromNav(nav);
       if (order.length) {
         applyLargeCategoryOrder(nav, order);
       }
-      draggingItem = null;
-      pointerId = null;
+      cleanupDragging();
     };
 
     const onPointerMove = (event) => {
@@ -1605,10 +1620,12 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
 
     const onPointerUp = async () => {
       document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("pointercancel", onPointerUp);
       await stopDragging();
     };
 
-    nav.addEventListener("pointerdown", (event) => {
+    const onPointerDown = (event) => {
       const handle = event.target?.closest?.(`.${LARGE_CATEGORY_HANDLE_CLASS}`);
       if (!handle) {
         return;
@@ -1624,8 +1641,16 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       item.classList.add(LARGE_CATEGORY_DRAGGING_CLASS);
       nav.setPointerCapture?.(event.pointerId);
       document.addEventListener("pointermove", onPointerMove);
-      document.addEventListener("pointerup", onPointerUp, { once: true });
-      document.addEventListener("pointercancel", onPointerUp, { once: true });
+      document.addEventListener("pointerup", onPointerUp);
+      document.addEventListener("pointercancel", onPointerUp);
+    };
+
+    nav.addEventListener("pointerdown", onPointerDown);
+    nativeSortableRegistry.set(nav, {
+      cleanupDragging,
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
     });
   };
 
@@ -1638,6 +1663,15 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       } catch (_error) {
         // ignore
       }
+    }
+    const nativeHandlers = nativeSortableRegistry.get(nav);
+    if (nativeHandlers) {
+      nav.removeEventListener("pointerdown", nativeHandlers.onPointerDown);
+      document.removeEventListener("pointermove", nativeHandlers.onPointerMove);
+      document.removeEventListener("pointerup", nativeHandlers.onPointerUp);
+      document.removeEventListener("pointercancel", nativeHandlers.onPointerUp);
+      nativeHandlers.cleanupDragging();
+      nativeSortableRegistry.delete(nav);
     }
     nav.dataset[LARGE_CATEGORY_SORTABLE_FLAG] = "";
     removeLargeCategoryHandles(nav);
@@ -1778,6 +1812,103 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     );
   };
 
+  const resetGeminiAnalysisState = () => {
+    geminiAnalysisState = {
+      month: "",
+      resultsByTxId: {},
+    };
+  };
+
+  const getGeminiSettingsFingerprint = (settings = {}) =>
+    JSON.stringify({
+      geminiAnalysisEnabled:
+        settings?.featureFlags?.geminiAnalysisEnabled ?? true,
+      geminiApiKeyConfigured: settings?.geminiApiKeyConfigured ?? false,
+      model: settings?.model ?? "",
+      scoreThreshold: settings?.scoreThreshold ?? null,
+    });
+
+  const mergeGeminiBatchResults = (month, results) => {
+    const nextResultsByTxId =
+      geminiAnalysisState.month === month
+        ? { ...geminiAnalysisState.resultsByTxId }
+        : {};
+
+    for (const item of results ?? []) {
+      if (!item?.id) {
+        continue;
+      }
+      nextResultsByTxId[item.id] =
+        typeof item.score === "number" && Number.isFinite(item.score)
+          ? item.score
+          : 0;
+    }
+
+    geminiAnalysisState = {
+      month,
+      resultsByTxId: nextResultsByTxId,
+    };
+  };
+
+  const isNonEmptyString = (value) =>
+    typeof value === "string" && value.trim().length > 0;
+
+  const sanitizeGeminiTransactionString = (value) => {
+    const text = typeof value === "string" ? value.trim() : "";
+    return text.slice(0, GEMINI_TRANSACTION_STRING_MAX_LENGTH);
+  };
+
+  const sanitizeGeminiTransaction = (transaction) => ({
+    id: sanitizeGeminiTransactionString(transaction.id),
+    date: sanitizeGeminiTransactionString(transaction.date),
+    store: sanitizeGeminiTransactionString(transaction.store),
+    amount: transaction.amount,
+    category: sanitizeGeminiTransactionString(transaction.category),
+    subcategory: sanitizeGeminiTransactionString(transaction.subcategory),
+  });
+
+  const sanitizeGeminiTransactions = (transactions) =>
+    (transactions ?? [])
+      .map(sanitizeGeminiTransaction)
+      .filter(
+        (transaction) =>
+          isNonEmptyString(transaction?.id) &&
+          isNonEmptyString(transaction?.date) &&
+          isNonEmptyString(transaction?.store) &&
+          typeof transaction?.amount === "number" &&
+          Number.isFinite(transaction.amount)
+      );
+
+  const buildGeminiPayload = ({ month, model, transactions }) => ({
+    type: "requestGeminiAnalysis",
+    month,
+    model,
+    transactions: sanitizeGeminiTransactions(transactions),
+  });
+
+  const getGeminiRuntimeErrorMessage = (lastError) => {
+    const message = lastError?.message ?? "";
+    if (message.includes("message channel closed")) {
+      return `background_channel_closed: ${message}`;
+    }
+    if (message.includes("Extension context invalidated")) {
+      return `extension_context_invalidated: ${message}`;
+    }
+    return message ? `runtime_message_error: ${message}` : "";
+  };
+
+  const formatGeminiErrorMessage = (message) => {
+    const trimmed = typeof message === "string" ? message.trim() : "";
+    if (!trimmed) {
+      return "Gemini解析に失敗しました";
+    }
+    const shortened =
+      trimmed.length > GEMINI_ERROR_MESSAGE_MAX_LENGTH
+        ? `${trimmed.slice(0, GEMINI_ERROR_MESSAGE_MAX_LENGTH)}...`
+        : trimmed;
+    return `Gemini解析に失敗しました: ${shortened}`;
+  };
+
   // Gemini解析の実行済み判定に使う月を取得する。
   const _getViewMonth = () => {
     const rows = getTransactionRows();
@@ -1791,22 +1922,20 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   };
 
-  // 月次で一度だけGeminiを実行するためのセッションフラグ。
-  const isMonthProcessed = (month) =>
-    getSessionFlag(`${SESSION_FLAG_PREFIX}${month}`) === "true";
-
-  const markMonthProcessed = (month) => {
-    setSessionFlag(`${SESSION_FLAG_PREFIX}${month}`, "true");
-  };
-
-  // 設定変更時に再解析できるようフラグをクリアする。
-  const clearSessionFlags = () => {
-    const targets = getSessionFlagKeys().filter((key) =>
-      key.startsWith(SESSION_FLAG_PREFIX)
-    );
-    for (const key of targets) {
-      removeSessionFlag(key);
+  const shouldSkipGeminiRun = (month, transactionIds) => {
+    if (geminiAnalysisState.month !== month) {
+      return false;
     }
+    const knownTxIds = new Set(Object.keys(geminiAnalysisState.resultsByTxId));
+    if (!transactionIds.length || knownTxIds.size === 0) {
+      return false;
+    }
+    for (const txId of transactionIds) {
+      if (!knownTxIds.has(txId)) {
+        return false;
+      }
+    }
+    return true;
   };
 
   // 進捗オーバーレイの要素IDは一箇所で管理する。
@@ -1932,9 +2061,6 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         row.querySelector(SELECTORS.categoryLarge)?.textContent?.trim() ?? "",
       subcategory:
         row.querySelector(SELECTORS.categoryMiddle)?.textContent?.trim() ?? "",
-      memo: row.querySelector(SELECTORS.memoText)?.textContent?.trim() ?? "",
-      paymentSource:
-        row.querySelector(SELECTORS.noteText)?.textContent?.trim() ?? "",
     };
   };
 
@@ -1942,6 +2068,8 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const shouldIncludeTransaction = ({
     txId,
     amount,
+    store,
+    date,
     isIncome,
     isTarget,
     isNegative,
@@ -1949,7 +2077,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     subcategory,
   }) => {
     const isValidAmount = amount !== null && amount !== undefined;
-    if (!(txId && isValidAmount)) {
+    if (!(txId && date && store && isValidAmount)) {
       return false;
     }
     if (!isTarget || isIncome || !isNegative) {
@@ -1982,8 +2110,6 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         amount: fields.amount,
         category: fields.category,
         subcategory: fields.subcategory,
-        memo: fields.memo,
-        payment_source: fields.paymentSource,
       });
     }
     return txList;
@@ -2112,25 +2238,27 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   // Geminiスコアが閾値以上の行をハイライトする。
-  const applyGeminiHighlight = (results, threshold) => {
-    const rows = getTransactionRows();
-    for (const row of rows) {
-      row.classList.remove(GEMINI_HIGHLIGHT_CLASS);
-    }
-    const scoreMap = new Map();
-    if (Array.isArray(results)) {
-      for (const item of results) {
-        if (!item?.id) {
-          continue;
-        }
-        scoreMap.set(item.id, item.score ?? 0);
+  const getGeminiHighlightedTxIds = (threshold) => {
+    const highlightedTxIds = new Set();
+    for (const [txId, score] of Object.entries(
+      geminiAnalysisState.resultsByTxId ?? {}
+    )) {
+      if (typeof score === "number" && score >= threshold) {
+        highlightedTxIds.add(txId);
       }
     }
+    return highlightedTxIds;
+  };
+
+  const applyGeminiHighlight = (threshold) => {
+    const rows = getTransactionRows();
+    const highlightedTxIds = getGeminiHighlightedTxIds(threshold);
     for (const row of rows) {
       const txId = findTxId(row);
-      const score = scoreMap.get(txId);
-      if (typeof score === "number" && score >= threshold) {
+      if (txId && highlightedTxIds.has(txId)) {
         row.classList.add(GEMINI_HIGHLIGHT_CLASS);
+      } else {
+        row.classList.remove(GEMINI_HIGHLIGHT_CLASS);
       }
     }
   };
@@ -2184,20 +2312,25 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   };
 
   // Gemini解析は月単位で1回だけ実行し、結果をハイライトに反映する。
-  const runGemini = async () => {
+  const runGeminiAnalysis = async () => {
     // 設定不備や二重実行はここで早期に弾く。
     const settings = await loadSettings();
-    const apiKey = settings.geminiApiKey;
     const threshold = settings.scoreThreshold ?? DEFAULT_THRESHOLD;
     const model = settings.model ?? DEFAULT_MODEL;
     const geminiEnabled = settings.featureFlags?.geminiAnalysisEnabled ?? true;
+    const apiKeyConfigured = settings.geminiApiKeyConfigured ?? true;
+    lastGeminiSettingsFingerprint = getGeminiSettingsFingerprint(settings);
 
     if (!geminiEnabled) {
       log("skip: gemini disabled by settings");
+      resetGeminiAnalysisState();
+      applyGeminiHighlight(threshold);
       return;
     }
-    if (!apiKey) {
+    if (!apiKeyConfigured) {
       log("skip: apiKey missing");
+      resetGeminiAnalysisState();
+      applyGeminiHighlight(threshold);
       return;
     }
 
@@ -2210,11 +2343,18 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       transactions[0]?.date?.slice(0, 7) ??
       `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 
-    if (isMonthProcessed(month)) {
-      // 同月内の再実行はセッション内で抑止する。
-      log("skip: session flag hit", month);
+    if (
+      shouldSkipGeminiRun(
+        month,
+        transactions.map((transaction) => transaction.id)
+      )
+    ) {
+      // 同月・同一取引集合なら既存結果を再適用する。
+      log("skip: cached results hit", month);
+      applyGeminiHighlight(threshold);
       return;
     }
+    resetGeminiAnalysisState();
 
     const batchSize = 15;
     const batches = buildBatches(transactions, batchSize);
@@ -2225,12 +2365,11 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
       batchSize,
       threshold,
       month,
-      apiKey,
       model,
       transactions,
       onProgress: updateProgressOverlay,
       onError: (idx, errorMessage) => {
-        log("gemini batch error", idx, errorMessage);
+        logError("gemini batch error", { batch: idx, error: errorMessage });
         setTimeout(() => removeOverlay(), 2000);
       },
     });
@@ -2240,8 +2379,47 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
 
     updateProgressOverlay(batches.length, batches.length, 0, { done: true });
-    markMonthProcessed(month);
     setTimeout(() => removeOverlay(), 1200);
+  };
+
+  const runQueuedGeminiIfNeeded = () => {
+    if (!geminiRunState.rerunQueued) {
+      return;
+    }
+    geminiRunState = {
+      inFlight: false,
+      rerunQueued: false,
+    };
+    resetGeminiAnalysisState();
+    setTimeout(() => {
+      runGemini({ forceRerun: true }).catch((error) => {
+        log("queued gemini rerun failed", error?.message ?? String(error));
+      });
+    }, 0);
+  };
+
+  const runGemini = async ({ forceRerun = false } = {}) => {
+    if (geminiRunState.inFlight) {
+      geminiRunState = {
+        inFlight: true,
+        rerunQueued: Boolean(geminiRunState.rerunQueued || forceRerun),
+      };
+      log("skip: gemini already running", {
+        rerunQueued: geminiRunState.rerunQueued,
+      });
+      return;
+    }
+
+    geminiRunState = {
+      inFlight: true,
+      rerunQueued: false,
+    };
+    try {
+      await runGeminiAnalysis();
+    } finally {
+      geminiRunState.inFlight = false;
+      runQueuedGeminiIfNeeded();
+    }
   };
 
   // API制限を考慮して取引をバッチ分割する。
@@ -2270,6 +2448,13 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         }
         settled = true;
         clearTimeout(timeout);
+        const runtimeError = getGeminiRuntimeErrorMessage(
+          chrome.runtime?.lastError
+        );
+        if (runtimeError) {
+          reject(new Error(runtimeError));
+          return;
+        }
         if (response?.ok && response.data?.results) {
           resolve(response.data.results);
         } else {
@@ -2284,7 +2469,6 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     batchSize,
     threshold,
     month,
-    apiKey,
     model,
     transactions,
     onProgress,
@@ -2297,26 +2481,25 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         batches.length,
         transactions.length - (i + 1) * batchSize
       );
-      const payload = {
-        type: "requestGeminiAnalysis",
-        apiKey,
-        model,
+      const payload = buildGeminiPayload({
         month,
+        model,
         transactions: batches[i],
-      };
+      });
       // eslint-disable-next-line no-await-in-loop
       const result = await sendGeminiBatch(payload).catch((error) => error);
       if (result instanceof Error) {
         // 1件でも失敗したら中断してユーザーに知らせる。
         onProgress?.(i + 1, batches.length, 0, {
           error: true,
-          errorMessage: "Gemini解析に失敗しました",
+          errorMessage: formatGeminiErrorMessage(result.message),
         });
         onError?.(i + 1, result.message);
         return "error";
       }
       log("gemini ok batch", i + 1, result.length);
-      applyGeminiHighlight(result, threshold);
+      mergeGeminiBatchResults(month, result);
+      applyGeminiHighlight(threshold);
     }
     return "ok";
   };
@@ -2411,11 +2594,9 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   const isSettingsArea = (area) => area === "sync" || area === "local";
 
   // 設定が変わったらキャッシュを捨て、必要な再描画を行う。
-  const handleSettingsChange = () => {
+  const handleSettingsChange = (oldSettings, newSettings) => {
     cachedSettings = null;
     cachedSettingsPromise = null;
-    clearSessionFlags();
-    log("settings changed; session flag cleared (no auto-run)");
     scheduleDuplicateCheck();
     scheduleCategoryCheck();
     if (isProfileRulePage()) {
@@ -2423,6 +2604,20 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
     }
     if (isCfPage()) {
       scheduleCfLargeCategoryOrdering();
+    }
+
+    const previousFingerprint =
+      oldSettings && typeof oldSettings === "object"
+        ? getGeminiSettingsFingerprint(oldSettings)
+        : lastGeminiSettingsFingerprint;
+    const nextFingerprint =
+      newSettings && typeof newSettings === "object"
+        ? getGeminiSettingsFingerprint(newSettings)
+        : "";
+    if (previousFingerprint !== nextFingerprint) {
+      resetGeminiAnalysisState();
+      log("settings changed; gemini cache cleared");
+      scheduleRunGemini();
     }
   };
 
@@ -2458,7 +2653,10 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         return;
       }
       if (changes.settings) {
-        handleSettingsChange();
+        handleSettingsChange(
+          changes.settings.oldValue ?? null,
+          changes.settings.newValue ?? null
+        );
       }
 
       const nextUiPrefs = changes[UI_PREFS_KEY]?.newValue;
@@ -2471,11 +2669,16 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
   }
 
   try {
-    chrome.runtime.onMessage.addListener((message) => {
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message?.type === "mf_subs_rerun_gemini") {
-        clearSessionFlags();
-        runGemini();
+        resetGeminiAnalysisState();
+        runGemini({ forceRerun: true }).catch((error) => {
+          log("manual gemini rerun failed", error?.message ?? String(error));
+        });
+        sendResponse?.({ ok: true });
+        return false;
       }
+      return false;
     });
   } catch (_e) {
     // コンテキスト無効化時は無視

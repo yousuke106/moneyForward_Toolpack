@@ -302,6 +302,7 @@ const buildSettingsSnapshot = ({
 
   return {
     geminiApiKey: apiKeyInput.value.trim() || apiKeyFallback,
+    geminiApiKeyConfigured: Boolean(apiKeyInput.value.trim() || apiKeyFallback),
     scoreThreshold: threshold,
     model: resolvedModel,
     featureFlags: {
