@@ -596,6 +596,7 @@ const NEGATIVE_HEAD_REGEX = /^[-−]/u;
         ".monthly-report-sum-head-block-item.amount, .monthly-report-sum-balance-item-amount",
         ".accounts-list .amount .number",
         "#monthly_total_table_home tr.js-monthly_total td",
+        "#cf-latest .recent-transactions-amount",
         ".total-assets .heading-radius-box, p.number.heading-radius-box",
         ".total-assets .fluctuation-list tbody tr td:nth-child(3)",
         ".total-assets .breakdown-list tbody tr td:nth-child(2)",

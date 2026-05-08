@@ -11,6 +11,7 @@ import { runGeminiAnalysisTests } from "./unit/gemini-analysis.test.js";
 import { runBackgroundGeminiRequestTests } from "./unit/background-gemini-request.test.js";
 import { runNativeSortableRegistryTests } from "./unit/native-sortable-registry.test.js";
 import { runSummaryOutgoCopyTests } from "./unit/summary-outgo-copy.test.js";
+import { runContentMaskingTests } from "./unit/content-masking.test.js";
 
 const main = async () => {
   await runDataTests();
@@ -24,6 +25,7 @@ const main = async () => {
   runBackgroundGeminiRequestTests();
   runNativeSortableRegistryTests();
   runSummaryOutgoCopyTests();
+  await runContentMaskingTests();
   await runStorageSettingsTests();
   await runUiPrefsTests();
   // eslint-disable-next-line no-console
