@@ -52,6 +52,19 @@ export const runBackgroundGeminiRequestTests = () => {
     ],
   });
 
+  for (const model of ["gemma-4-26b-a4b-it", "gemma-4-31b-it"]) {
+    const gemmaRequest = getValidatedGeminiRequest(
+      {
+        type: "requestGeminiAnalysis",
+        month: "2026-04",
+        model,
+        transactions: [],
+      },
+      { tab: { url: "https://moneyforward.com/cf" } }
+    );
+    assert.strictEqual(gemmaRequest.model, model);
+  }
+
   assert.throws(
     () =>
       getValidatedGeminiRequest(

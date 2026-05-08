@@ -12,6 +12,7 @@ import { runBackgroundGeminiRequestTests } from "./unit/background-gemini-reques
 import { runNativeSortableRegistryTests } from "./unit/native-sortable-registry.test.js";
 import { runSummaryOutgoCopyTests } from "./unit/summary-outgo-copy.test.js";
 import { runContentMaskingTests } from "./unit/content-masking.test.js";
+import { runSettingsConstantsTests } from "./unit/settings-constants.test.js";
 
 const main = async () => {
   await runDataTests();
@@ -23,6 +24,7 @@ const main = async () => {
   runGeminiUtilsTests();
   runGeminiAnalysisTests();
   runBackgroundGeminiRequestTests();
+  runSettingsConstantsTests();
   runNativeSortableRegistryTests();
   runSummaryOutgoCopyTests();
   await runContentMaskingTests();

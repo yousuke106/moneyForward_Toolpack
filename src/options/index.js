@@ -6,6 +6,7 @@ import {
 import {
   DEFAULT_MODEL,
   DEFAULT_THRESHOLD,
+  MODEL_OPTIONS,
 } from "../data/settings-constants.js";
 import { loadSettings, saveSettingsWithFallback } from "../data/storage.js";
 import {
@@ -66,27 +67,6 @@ const categoryImportInput = document.getElementById("categoryImportInput");
 
 // モデル/閾値などの初期値・選択肢はここで集中管理する。
 const CUSTOM_MODEL_VALUE = "__custom__";
-const MODEL_OPTIONS = [
-  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash（推奨・高速）" },
-  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro（高精度）" },
-  { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite（軽量）" },
-  { value: "gemini-3-pro-preview", label: "Gemini 3 Pro Preview（検証向け）" },
-  {
-    value: "gemini-3-pro-image-preview",
-    label: "Gemini 3 Pro Image Preview（画像対応検証）",
-  },
-  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash（互換）" },
-  {
-    value: "gemini-2.0-flash-lite",
-    label: "Gemini 2.0 Flash-Lite（互換軽量）",
-  },
-  {
-    value: "gemini-2.0-pro-exp-02-05",
-    label: "Gemini 2.0 Pro Experimental（旧検証）",
-  },
-  { value: "gemini-1.5-pro-latest", label: "Gemini 1.5 Pro（互換用）" },
-  { value: "gemini-1.5-flash-latest", label: "Gemini 1.5 Flash（互換用）" },
-];
 
 // CSVインポート/エクスポート関連の制約。
 const MAX_IMPORT_BYTES = 200 * 1024;
@@ -725,7 +705,7 @@ const load = async () => {
 
   const result = await loadSettings();
   if (!result) {
-    modelSelect.value = "gemini-2.5-flash";
+    modelSelect.value = DEFAULT_MODEL;
     enableDefaultFeatureToggles();
     if (largeCategoryOrderResetBtn) {
       largeCategoryOrderResetBtn.disabled = true;
@@ -1082,7 +1062,7 @@ const populateModels = () => {
     modelSelect.append(option);
   }
   if (!modelSelect.value) {
-    modelSelect.value = "gemini-2.5-flash";
+    modelSelect.value = DEFAULT_MODEL;
   }
 };
 
