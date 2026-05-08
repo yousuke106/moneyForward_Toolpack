@@ -9,6 +9,7 @@ import {
   isSummaryOutgoAmountCopyEnabled,
   parseMonthFromHeader,
 } from "./downloader-utils.js";
+import { buildGeminiPromptBody } from "./gemini-prompt.js";
 import { getValidatedGeminiRequest } from "./gemini-request.js";
 import { extractJson } from "./gemini-utils.js";
 import {
@@ -38,24 +39,6 @@ const logGeminiError = (error) => {
     "[mf-sub] gemini request failed",
     error?.message ?? String(error)
   );
-};
-
-// Geminiに渡す最小限のプロンプトを組み立てる（ラベル値は返させない）。
-const buildPrompt = (month, transactions) => {
-  const instruction = [
-    "You are an assistant that flags potential subscription transactions.",
-    "Return JSON with a 'results' array of objects: { id, score } where score is 0-100.",
-    "Score higher if the merchant and amount look recurring or fixed.",
-    "Only include ids that meet threshold logic; still return score for all given ids.",
-  ].join(" ");
-  const user = JSON.stringify({ month, transactions });
-  return {
-    contents: [
-      {
-        parts: [{ text: `${instruction}\n\nTransactions:\n${user}` }],
-      },
-    ],
-  };
 };
 
 // バッジは短時間で自動クリアする運用にして、誤操作を防ぐ。
@@ -413,7 +396,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           message,
           sender
         );
-        const body = buildPrompt(month, transactions);
+        const body = buildGeminiPromptBody(month, transactions);
 
         const res = await withApiKey((apiKey) => {
           if (!apiKey) {
