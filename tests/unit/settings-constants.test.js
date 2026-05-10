@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import {
   DEFAULT_MODEL,
+  isExperimentalModel,
   MODEL_OPTIONS,
 } from "../../src/data/settings-constants.js";
 
@@ -10,8 +11,8 @@ const EXPECTED_MODEL_OPTIONS = [
   { value: "gemini-3-pro-preview", label: "Gemini 3 Pro Preview（最新・高精度）" },
   { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro（安定・高精度）" },
   { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite（安定・軽量）" },
-  { value: "gemma-4-26b-a4b-it", label: "Gemma 4 26B A4B IT（Gemma・軽量）" },
-  { value: "gemma-4-31b-it", label: "Gemma 4 31B IT（Gemma・高性能）" },
+  { value: "gemma-4-26b-a4b-it", label: "Gemma 4 26B A4B IT（実験的・不安定）" },
+  { value: "gemma-4-31b-it", label: "Gemma 4 31B IT（実験的・不安定）" },
 ];
 
 export const runSettingsConstantsTests = () => {
@@ -23,4 +24,7 @@ export const runSettingsConstantsTests = () => {
   assert.ok(!modelIds.some((value) => value.startsWith("gemini-2.0-")));
   assert.ok(!modelIds.some((value) => value.includes("image")));
   assert.ok(!modelIds.some((value) => value.includes("tts")));
+  assert.strictEqual(isExperimentalModel("gemma-4-26b-a4b-it"), true);
+  assert.strictEqual(isExperimentalModel("gemma-4-31b-it"), true);
+  assert.strictEqual(isExperimentalModel("gemini-2.5-flash"), false);
 };

@@ -1,4 +1,5 @@
 /* globals chrome */
+import { isExperimentalModel } from "../data/settings-constants.js";
 import { loadSettings, withApiKey } from "../data/storage.js";
 import {
   BADGE_COLORS,
@@ -9,9 +10,16 @@ import {
   isSummaryOutgoAmountCopyEnabled,
   parseMonthFromHeader,
 } from "./downloader-utils.js";
-import { buildGeminiPromptBody } from "./gemini-prompt.js";
+import {
+  buildGeminiPromptBody,
+  buildGemmaPromptBody,
+} from "./gemini-prompt.js";
 import { getValidatedGeminiRequest } from "./gemini-request.js";
-import { extractJson } from "./gemini-utils.js";
+import {
+  extractJson,
+  formatGeminiApiError,
+  validateGeminiResults,
+} from "./gemini-utils.js";
 import {
   buildClipboardTextFromAmounts,
   collectOutgoAmountsForCopy,
@@ -19,6 +27,9 @@ import {
 
 // GeminiのAPIタイムアウトとUI周りはここで一括管理する。
 const TIMEOUT_MS = 60_000;
+const GEMMA_MAX_ATTEMPTS = 3;
+const GEMMA_RETRY_BASE_DELAY_MS = 800;
+const GEMMA_RETRYABLE_STATUSES = new Set([429, 500, 503]);
 const DOWNLOAD_MENU_ID = "mf-download-visible-month";
 const SUMMARY_OUTGO_COPY_MENU_ID = "mf-copy-summary-outgo-amounts";
 const DOWNLOAD_MENU_URL_PATTERNS = [
@@ -39,6 +50,89 @@ const logGeminiError = (error) => {
     "[mf-sub] gemini request failed",
     error?.message ?? String(error)
   );
+};
+
+const wait = (delayMs) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+
+const getGemmaRetryDelay = (attempt) => GEMMA_RETRY_BASE_DELAY_MS * attempt;
+
+const shouldRetryGemmaResponse = ({ experimental, status, attempt }) =>
+  experimental &&
+  attempt < GEMMA_MAX_ATTEMPTS &&
+  GEMMA_RETRYABLE_STATUSES.has(status);
+
+const buildModelPromptBody = ({ model, month, transactions }) =>
+  isExperimentalModel(model)
+    ? buildGemmaPromptBody(month, transactions)
+    : buildGeminiPromptBody(month, transactions);
+
+const fetchGeminiModel = ({ apiKey, body, model, signal }) =>
+  fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify(body),
+      signal,
+      // keepalive is ignored in SW fetch but included for safety
+      keepalive: true,
+    }
+  );
+
+const requestGeminiModel = async ({
+  apiKey,
+  body,
+  model,
+  signal,
+  transactions,
+}) => {
+  const experimental = isExperimentalModel(model);
+  const maxAttempts = experimental ? GEMMA_MAX_ATTEMPTS : 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let res;
+    try {
+      res = await fetchGeminiModel({ apiKey, body, model, signal });
+    } catch (error) {
+      if (signal.aborted || attempt >= maxAttempts || !experimental) {
+        throw error;
+      }
+      await wait(getGemmaRetryDelay(attempt));
+      continue;
+    }
+
+    if (res.ok) {
+      return res.json();
+    }
+
+    const bodyText = await res.text().catch(() => "");
+    const errorMessage = formatGeminiApiError({
+      status: res.status,
+      statusText: res.statusText,
+      model,
+      transactionCount: transactions.length,
+      bodyText,
+    });
+    if (
+      shouldRetryGemmaResponse({
+        experimental,
+        status: res.status,
+        attempt,
+      })
+    ) {
+      await wait(getGemmaRetryDelay(attempt));
+      continue;
+    }
+    throw new Error(errorMessage);
+  }
+
+  throw new Error("Gemini API error: retry_exhausted");
 };
 
 // バッジは短時間で自動クリアする運用にして、誤操作を防ぐ。
@@ -396,33 +490,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           message,
           sender
         );
-        const body = buildGeminiPromptBody(month, transactions);
+        const body = buildModelPromptBody({ model, month, transactions });
 
-        const res = await withApiKey((apiKey) => {
+        const data = await withApiKey((apiKey) => {
           if (!apiKey) {
             throw new Error("APIキーが設定されていません");
           }
-          return fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-goog-api-key": apiKey,
-              },
-              body: JSON.stringify(body),
-              signal: controller.signal,
-              // keepalive is ignored in SW fetch but included for safety
-              keepalive: true,
-            }
-          );
+          return requestGeminiModel({
+            apiKey,
+            body,
+            model,
+            signal: controller.signal,
+            transactions,
+          });
         });
-        if (!res.ok) {
-          throw new Error(`Gemini API error: ${res.status}`);
-        }
-        const data = await res.json();
         const parsed = extractJson(data);
-        sendResponse({ ok: true, data: parsed });
+        const validated = validateGeminiResults(
+          parsed,
+          transactions,
+          isExperimentalModel(model) ? "gemma" : "gemini"
+        );
+        sendResponse({ ok: true, data: validated });
       } catch (error) {
         logGeminiError(error);
         sendResponse({ ok: false, error: error?.message ?? String(error) });

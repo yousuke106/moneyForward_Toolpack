@@ -1,4 +1,5 @@
 // Gemini応答のJSON抽出を安全に行うユーティリティ。
+const GEMINI_ERROR_BODY_MAX_LENGTH = 500;
 
 // Markdownコードフェンスを除去して解析対象を整える。
 const stripCodeFence = (text) => text.replace(/```(?:json)?/gu, "").trim();
@@ -106,4 +107,94 @@ export const extractJson = (data) => {
     }
     return parsed;
   }
+};
+
+const compactBodyText = (bodyText) =>
+  typeof bodyText === "string"
+    ? bodyText
+        .replace(/\s+/gu, " ")
+        .trim()
+        .slice(0, GEMINI_ERROR_BODY_MAX_LENGTH)
+    : "";
+
+export const formatGeminiApiError = ({
+  status,
+  statusText,
+  model,
+  transactionCount,
+  bodyText,
+}) => {
+  const parts = [`Gemini API error: ${status}`];
+  if (statusText) {
+    parts[0] = `${parts[0]} ${statusText}`;
+  }
+  if (model) {
+    parts.push(`model=${model}`);
+  }
+  if (
+    typeof transactionCount === "number" &&
+    Number.isFinite(transactionCount)
+  ) {
+    parts.push(`transactions=${transactionCount}`);
+  }
+  const compactedBodyText = compactBodyText(bodyText);
+  if (compactedBodyText) {
+    parts.push(`body=${compactedBodyText}`);
+  }
+  return parts.join(" ");
+};
+
+const getExpectedTransactionIds = (transactions) =>
+  new Set(
+    (transactions ?? [])
+      .map((transaction) => transaction?.id)
+      .filter((id) => typeof id === "string" && id.length > 0)
+  );
+
+const throwInvalidResults = (source, reason) => {
+  throw new Error(`invalid_${source}_response:${reason}`);
+};
+
+export const validateGeminiResults = (
+  parsed,
+  transactions,
+  source = "gemma"
+) => {
+  if (!Array.isArray(parsed?.results)) {
+    throwInvalidResults(source, "missing_results");
+  }
+
+  const expectedIds = getExpectedTransactionIds(transactions);
+  const seenIds = new Set();
+  const normalizedResults = [];
+
+  for (const result of parsed.results) {
+    const id = result?.id;
+    const score = result?.score;
+    if (typeof id !== "string" || id.length === 0) {
+      throwInvalidResults(source, "invalid_id");
+    }
+    if (!expectedIds.has(id)) {
+      throwInvalidResults(source, "unexpected_result");
+    }
+    if (seenIds.has(id)) {
+      throwInvalidResults(source, "duplicate_result");
+    }
+    if (
+      typeof score !== "number" ||
+      !Number.isInteger(score) ||
+      score < 0 ||
+      score > 100
+    ) {
+      throwInvalidResults(source, "invalid_score");
+    }
+    seenIds.add(id);
+    normalizedResults.push({ id, score });
+  }
+
+  if (seenIds.size !== expectedIds.size) {
+    throwInvalidResults(source, "missing_result");
+  }
+
+  return { results: normalizedResults };
 };

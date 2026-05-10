@@ -1,5 +1,9 @@
 import assert from "node:assert";
-import { extractJson } from "../../src/background/gemini-utils.js";
+import {
+  extractJson,
+  formatGeminiApiError,
+  validateGeminiResults,
+} from "../../src/background/gemini-utils.js";
 
 export const runGeminiUtilsTests = () => {
   const base = {
@@ -79,4 +83,50 @@ export const runGeminiUtilsTests = () => {
     ]
   };
   assert.throws(() => extractJson(missing), /Missing results field/);
+
+  const apiError = formatGeminiApiError({
+    status: 500,
+    statusText: "Internal Server Error",
+    model: "gemini-2.5-flash",
+    transactionCount: 12,
+    bodyText: '{"error":{"message":"structured output schema rejected"}}',
+  });
+  assert.match(apiError, /Gemini API error: 500 Internal Server Error/u);
+  assert.match(apiError, /model=gemini-2\.5-flash/u);
+  assert.match(apiError, /transactions=12/u);
+  assert.match(apiError, /structured output schema rejected/u);
+
+  const transactions = [
+    { id: "tx-1" },
+    { id: "tx-2" },
+  ];
+  assert.deepStrictEqual(
+    validateGeminiResults(
+      {
+        results: [
+          { id: "tx-1", score: 80 },
+          { id: "tx-2", score: 20 },
+        ],
+      },
+      transactions
+    ),
+    {
+      results: [
+        { id: "tx-1", score: 80 },
+        { id: "tx-2", score: 20 },
+      ],
+    }
+  );
+  assert.throws(
+    () => validateGeminiResults({ results: [{ id: "tx-1", score: 80 }] }, transactions),
+    /invalid_gemma_response:missing_result/
+  );
+  assert.throws(
+    () =>
+      validateGeminiResults(
+        { results: [{ id: "tx-1", score: 101 }, { id: "tx-2", score: 20 }] },
+        transactions
+      ),
+    /invalid_gemma_response:invalid_score/
+  );
 };

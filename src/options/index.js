@@ -6,6 +6,7 @@ import {
 import {
   DEFAULT_MODEL,
   DEFAULT_THRESHOLD,
+  isExperimentalModel,
   MODEL_OPTIONS,
 } from "../data/settings-constants.js";
 import { loadSettings, saveSettingsWithFallback } from "../data/storage.js";
@@ -23,6 +24,7 @@ const modelSelect = document.getElementById("model");
 const customModelWrapper = document.getElementById("customModelWrapper");
 const customModelInput = document.getElementById("customModelInput");
 const customModelError = document.getElementById("customModelError");
+const experimentalModelNote = document.getElementById("experimentalModelNote");
 const statusEl = document.getElementById("status");
 const saveBtn = document.getElementById("saveBtn");
 const apiKeyErrorEl = document.getElementById("apiKeyError");
@@ -86,6 +88,13 @@ const renderStatus = (message, isError = false) => {
 const toggleCustomModel = (value) => {
   const isCustom = value === CUSTOM_MODEL_VALUE;
   customModelWrapper.classList.toggle("hidden", !isCustom);
+};
+
+const updateExperimentalModelNote = (value) => {
+  experimentalModelNote?.classList.toggle(
+    "hidden",
+    !isExperimentalModel(value)
+  );
 };
 
 // APIキーの表示/非表示はtype属性で切り替える。
@@ -667,9 +676,11 @@ const applySettingsToUi = (settings, area) => {
     if (exists) {
       modelSelect.value = settings.model;
       toggleCustomModel(settings.model);
+      updateExperimentalModelNote(settings.model);
     } else {
       modelSelect.value = CUSTOM_MODEL_VALUE;
       toggleCustomModel(CUSTOM_MODEL_VALUE);
+      updateExperimentalModelNote(CUSTOM_MODEL_VALUE);
       customModelInput.value = settings.model;
     }
   }
@@ -1070,6 +1081,7 @@ populateModels();
 
 modelSelect.addEventListener("change", () => {
   toggleCustomModel(modelSelect.value);
+  updateExperimentalModelNote(modelSelect.value);
   validate();
 });
 load().catch((error) =>

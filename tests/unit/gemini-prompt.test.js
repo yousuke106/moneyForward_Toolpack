@@ -1,5 +1,8 @@
 import assert from "node:assert";
-import { buildGeminiPromptBody } from "../../src/background/gemini-prompt.js";
+import {
+  buildGeminiPromptBody,
+  buildGemmaPromptBody,
+} from "../../src/background/gemini-prompt.js";
 
 export const runGeminiPromptTests = () => {
   const transactions = [
@@ -42,4 +45,18 @@ export const runGeminiPromptTests = () => {
   assert.ok(!promptText.includes("Only include ids that meet threshold logic"));
   assert.ok(!promptText.includes("threshold logic"));
   assert.ok(promptText.includes(JSON.stringify({ month: "2026-04", transactions })));
+
+  const gemmaBody = buildGemmaPromptBody("2026-04", transactions);
+  const gemmaPromptText = gemmaBody.contents?.[0]?.parts?.[0]?.text ?? "";
+  assert.strictEqual(gemmaBody.generationConfig?.responseJsonSchema, undefined);
+  assert.strictEqual(gemmaBody.generationConfig?.responseMimeType, undefined);
+  assert.match(gemmaPromptText, /Return ONLY a valid JSON object/u);
+  assert.match(gemmaPromptText, /Do not write markdown/u);
+  assert.match(
+    gemmaPromptText,
+    /Return exactly one result for every input transaction id/u
+  );
+  assert.ok(
+    gemmaPromptText.includes(JSON.stringify({ month: "2026-04", transactions }))
+  );
 };

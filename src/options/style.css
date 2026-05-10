@@ -182,6 +182,15 @@ select:focus {
   color: var(--muted);
 }
 
+.model-warning {
+  padding: 8px 10px;
+  margin-top: 8px;
+  color: #7a4100;
+  background: #fff6df;
+  border: 1px solid #ffd58a;
+  border-radius: 8px;
+}
+
 .field-title {
   font-weight: 700;
 }
