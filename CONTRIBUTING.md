@@ -38,6 +38,18 @@ corepack pnpm run format
 
 `format` may modify files. Review the diff before committing.
 
+## Local Validation
+
+This project does not use GitHub Actions. Maintainers and contributors should
+run validation locally before pushing or requesting review.
+
+```bash
+corepack pnpm install --frozen-lockfile
+corepack pnpm run check
+corepack pnpm run test
+corepack pnpm run build
+```
+
 ## Pull Request Checklist
 
 - Keep the PR focused on one intent.

@@ -159,7 +159,7 @@
 
 ### Phase 3: テスト / 品質
 - 主要 DOM 断面を fixture として追加し、並び替え関数のユニットテスト（もしくは軽量 integration）を用意する。
-- `npm exec -- ultracite check` を CI 相当として通す。
+- `corepack pnpm run check` をローカル検証として通す。
 
 ## 実装タスクリスト（実装段階）
 1. [x] `manifest.json` に `/profile/rule` を `content_scripts.matches` として追加する（設定画面に content script を注入）
